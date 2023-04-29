@@ -1,0 +1,37 @@
+../aten/src/ATen/native/cuda/Loss.cu:242: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [7,0,0] Assertion `t >= 0 && t < n_classes` failed.
+loss:  tensor(13.7065, device='cuda:0', grad_fn=<AddBackward0>)
+loss:  tensor(13.5722, device='cuda:0', grad_fn=<AddBackward0>)
+loss:  tensor(13.4863, device='cuda:0', grad_fn=<AddBackward0>)
+loss:  tensor(13.3717, device='cuda:0', grad_fn=<AddBackward0>)
+loss:  tensor(13.2449, device='cuda:0', grad_fn=<AddBackward0>)
+loss:  tensor(13.1821, device='cuda:0', grad_fn=<AddBackward0>)
+loss:  tensor(13.0932, device='cuda:0', grad_fn=<AddBackward0>)
+loss:  tensor(13.0185, device='cuda:0', grad_fn=<AddBackward0>)
+loss:  tensor(12.9336, device='cuda:0', grad_fn=<AddBackward0>)
+loss:  tensor(12.7305, device='cuda:0', grad_fn=<AddBackward0>)
+loss:  tensor(12.7999, device='cuda:0', grad_fn=<AddBackward0>)
+loss:  tensor(12.6663, device='cuda:0', grad_fn=<AddBackward0>)
+loss:  tensor(12.5252, device='cuda:0', grad_fn=<AddBackward0>)
+loss:  tensor(12.5852, device='cuda:0', grad_fn=<AddBackward0>)
+loss:  tensor(12.4882, device='cuda:0', grad_fn=<AddBackward0>)
+loss:  tensor(12.4030, device='cuda:0', grad_fn=<AddBackward0>)
+loss:  tensor(12.2864, device='cuda:0', grad_fn=<AddBackward0>)
+loss:  tensor(12.3306, device='cuda:0', grad_fn=<AddBackward0>)
+loss:  tensor(12.2788, device='cuda:0', grad_fn=<AddBackward0>)
+loss:  tensor(12.5692, device='cuda:0', grad_fn=<AddBackward0>)
+loss:  tensor(12.3415, device='cuda:0', grad_fn=<AddBackward0>)
+loss:  tensor(12.1818, device='cuda:0', grad_fn=<AddBackward0>)
+loss:  tensor(12.2895, device='cuda:0', grad_fn=<AddBackward0>)
+loss:  tensor(12.0980, device='cuda:0', grad_fn=<AddBackward0>)
+Traceback (most recent call last):
+  File "main.py", line 111, in <module>
+    main()
+  File "main.py", line 68, in main
+    loss.backward()
+  File "/ext3/miniconda3/lib/python3.7/site-packages/torch/_tensor.py", line 489, in backward
+    self, gradient, retain_graph, create_graph, inputs=inputs
+  File "/ext3/miniconda3/lib/python3.7/site-packages/torch/autograd/__init__.py", line 199, in backward
+    allow_unreachable=True, accumulate_grad=True)  # Calls into the C++ engine to run the backward pass
+RuntimeError: CUDA error: device-side assert triggered
+CUDA kernel errors might be asynchronously reported at some other API call,so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1.

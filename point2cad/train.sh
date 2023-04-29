@@ -1,0 +1,1 @@
+python main.py --data_path /home/shuhang/Desktop/data/cad/Sketch_1_Extrude_1
