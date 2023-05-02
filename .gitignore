@@ -1,5 +1,7 @@
 /results
 results/
+/data
+data/
 *.h5
 *.png
 *.0
