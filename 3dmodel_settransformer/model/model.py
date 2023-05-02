@@ -30,7 +30,7 @@ import utils.parser as parser
 from .attention import MultiheadAttention
 from .transformer import _get_activation_fn
 from .build import MODELS
-
+from .set_transformer import InducedSetAttentionBlock
 class Encoder(nn.Module):   ## Embedding module
     def __init__(self, encoder_channel):
         super().__init__()
@@ -466,19 +466,20 @@ class Decoder(nn.Module):
         self.linear = nn.Sequential(
             nn.Linear(cfg.num_group*cfg.encoder_dims,cfg.dim_z),
         )
-
+        self.settransformer = InducedSetAttentionBlock(cfg.encoder_dims,cfg.max_total_len,cfg.device)
 
         self.bottleneck = Bottleneck(cfg)
     def forward(self, z):
-        #src = self.embedding(z)
-        
-        
-        
-        z = z.view(z.shape[0],-1).unsqueeze(0)
-        # src = src.view(src.shape[0],-1).unsqueeze(0)
-        # src = self.linear3(self.activate(self.linear2(self.activate(self.linear1(src)))))
-        z = self.linear(z)
-        #print('z.shape: ',z.shape)
+        '''linear'''
+        # z = z.view(z.shape[0],-1).unsqueeze(0)
+        # z = self.linear(z)
+        '''max'''
+        # z = torch.max(z, dim=1, keepdim=True)[0]
+        # z = z.permute(1,0,2)
+        '''set_transformer'''
+        z = self.settransformer(z)
+        z = z.permute(1,0,2)
+        ''''''''''''''''''''''''''''''''''''''''''
         z = self.bottleneck(z)
         src = self.embedding(z)
         #print('src.shape: ',src.shape)

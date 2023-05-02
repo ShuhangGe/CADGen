@@ -17,7 +17,7 @@ import os, sys
 # optimizer
 import torch.optim as optim
 import numpy as np
-from apex import amp
+#from apex import amp
 from torch.cuda.amp import autocast as autocast
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 # utils

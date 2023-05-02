@@ -213,7 +213,76 @@ class TransformerEncoder(nn.Module):
 
 #         x = self.head(self.norm(x[:, -return_token_num:]))  # only return the mask tokens predict pixel
 #         return x
-    
+# Pretrain model
+class MaskTransformer(nn.Module):
+    def __init__(self, config, **kwargs):
+        super().__init__()
+        self.config = config
+        # define the transformer argparse
+        self.mask_ratio = config.mask_ratio 
+        self.trans_dim = config.trans_dim
+        self.depth = config.depth 
+        self.drop_path_rate = config.drop_path_rate
+        self.num_heads = config.num_heads 
+
+        # embedding
+        self.encoder_dims =  config.encoder_dims
+        self.encoder = Encoder(encoder_channel = self.encoder_dims)
+
+        self.mask_type = config.mask_type
+
+        self.pos_embed = nn.Sequential(
+            nn.Linear(3, 128),
+            nn.GELU(),
+            nn.Linear(128, self.trans_dim),
+        )
+
+        dpr = [x.item() for x in torch.linspace(0, self.drop_path_rate, self.depth)]
+        self.blocks = TransformerEncoder(
+            embed_dim = self.trans_dim,
+            depth = self.depth,
+            drop_path_rate = dpr,
+            num_heads = self.num_heads,
+        )
+
+        self.norm = nn.LayerNorm(self.trans_dim)
+        self.apply(self._init_weights)
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            trunc_normal_(m.weight, std=.02)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
+        elif isinstance(m, nn.Conv1d):
+            trunc_normal_(m.weight, std=.02)
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+
+
+    def forward(self, neighborhood, center, noaug = False):
+        # generate mask
+        # if self.mask_type == 'rand':
+        #     bool_masked_pos = self._mask_center_rand(center, noaug = noaug) # B G
+        # else:
+        #     bool_masked_pos = self._mask_center_block(center, noaug = noaug)
+
+        group_input_tokens = self.encoder(neighborhood)  #  B G C
+
+        # add pos embedding
+        # mask pos center
+
+        pos = self.pos_embed(center)
+
+        # transformer
+        x_vis = self.blocks(group_input_tokens, pos)
+        x_vis = self.norm(x_vis)
+        #print()
+
+        return x_vis
+
 # decoder from deepcad
 '''
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -431,15 +500,15 @@ class Decoder(nn.Module):
 
         self.bottleneck = Bottleneck(cfg)
     def forward(self, z):
-        #src = self.embedding(z)
+
+
         
-        
-        
-        z = z.view(z.shape[0],-1).unsqueeze(0)
-        # src = src.view(src.shape[0],-1).unsqueeze(0)
-        # src = self.linear3(self.activate(self.linear2(self.activate(self.linear1(src)))))
-        z = self.linear(z)
-        #print('z.shape: ',z.shape)
+        # z = z.view(z.shape[0],-1).unsqueeze(0)
+        # z = self.linear(z)
+        z = torch.max(z, dim=1, keepdim=True)[0]
+        #print('z1.shape: ',z.shape)
+        z = z.permute(1,0,2)
+        #print('z2.shape: ',z.shape)
         z = self.bottleneck(z)
         src = self.embedding(z)
         #print('src.shape: ',src.shape)
@@ -453,75 +522,6 @@ class Decoder(nn.Module):
 '''
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------
 '''
-# Pretrain model
-class MaskTransformer(nn.Module):
-    def __init__(self, config, **kwargs):
-        super().__init__()
-        self.config = config
-        # define the transformer argparse
-        self.mask_ratio = config.mask_ratio 
-        self.trans_dim = config.trans_dim
-        self.depth = config.depth 
-        self.drop_path_rate = config.drop_path_rate
-        self.num_heads = config.num_heads 
-
-        # embedding
-        self.encoder_dims =  config.encoder_dims
-        self.encoder = Encoder(encoder_channel = self.encoder_dims)
-
-        self.mask_type = config.mask_type
-
-        self.pos_embed = nn.Sequential(
-            nn.Linear(3, 128),
-            nn.GELU(),
-            nn.Linear(128, self.trans_dim),
-        )
-
-        dpr = [x.item() for x in torch.linspace(0, self.drop_path_rate, self.depth)]
-        self.blocks = TransformerEncoder(
-            embed_dim = self.trans_dim,
-            depth = self.depth,
-            drop_path_rate = dpr,
-            num_heads = self.num_heads,
-        )
-
-        self.norm = nn.LayerNorm(self.trans_dim)
-        self.apply(self._init_weights)
-
-    def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=.02)
-            if isinstance(m, nn.Linear) and m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.bias, 0)
-            nn.init.constant_(m.weight, 1.0)
-        elif isinstance(m, nn.Conv1d):
-            trunc_normal_(m.weight, std=.02)
-            if m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-
-
-    def forward(self, neighborhood, center, noaug = False):
-        # generate mask
-        # if self.mask_type == 'rand':
-        #     bool_masked_pos = self._mask_center_rand(center, noaug = noaug) # B G
-        # else:
-        #     bool_masked_pos = self._mask_center_block(center, noaug = noaug)
-
-        group_input_tokens = self.encoder(neighborhood)  #  B G C
-
-        # add pos embedding
-        # mask pos center
-
-        pos = self.pos_embed(center)
-
-        # transformer
-        x_vis = self.blocks(group_input_tokens, pos)
-        x_vis = self.norm(x_vis)
-        #print()
-
-        return x_vis
 
 
 @MODELS.register_module()
