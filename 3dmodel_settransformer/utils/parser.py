@@ -53,9 +53,9 @@ def get_args():
     parser.add_argument('--mask_type', type=str, default='rand')
     parser.add_argument('--num_group', type=int, default=40)#64
     parser.add_argument('--num_heads', type=int, default=4)#6
-    parser.add_argument('--trans_dim', type=int, default=160)#384
+    parser.add_argument('--trans_dim', type=int, default=256)#384
     '''num_group*num_heads = trans_dim'''
-    parser.add_argument('--encoder_dims', type=int, default=160)#384
+    parser.add_argument('--encoder_dims', type=int, default=256)#384
     parser.add_argument('--depth', type=int, default=12)
     parser.add_argument('--drop_path_rate', type=float, default=0.1)
 

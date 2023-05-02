@@ -14,4 +14,4 @@ module purge
 singularity exec --nv \
                     --overlay /scratch/sg7484/pytorch-example/maegen-15GB-500K.ext3:rw \
                             /scratch/work/public/singularity/cuda11.2.2-cudnn8-devel-ubuntu20.04.sif \
-                             /bin/bash -c "source /ext3/env.sh; python train.py --save_path ../result/exp_3d2cmd1 --epochs 900"
+                             /bin/bash -c "source /ext3/env.sh; python train.py --save_path ../result/exp_3d_max_settransformer --epochs 900 "
