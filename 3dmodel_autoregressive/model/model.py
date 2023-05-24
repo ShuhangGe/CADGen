@@ -31,7 +31,7 @@ from .attention import MultiheadAttention
 from .transformer import _get_activation_fn
 from .build import MODELS
 from .text_encoder import Text_Encoder
-
+from bert.modeling_bert improt BertEncoder
 
 class Encoder(nn.Module):   ## Embedding module
     def __init__(self, encoder_channel):
@@ -185,38 +185,6 @@ class TransformerEncoder(nn.Module):
         return x
 
 
-# class TransformerDecoder(nn.Module):
-#     def __init__(self, embed_dim=384, depth=4, num_heads=6, mlp_ratio=4., qkv_bias=False, qk_scale=None,
-#                  drop_rate=0., attn_drop_rate=0., drop_path_rate=0.1, norm_layer=nn.LayerNorm):
-#         super().__init__()
-#         self.blocks = nn.ModuleList([
-#             Block(
-#                 dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
-#                 drop=drop_rate, attn_drop=attn_drop_rate,
-#                 drop_path=drop_path_rate[i] if isinstance(drop_path_rate, list) else drop_path_rate
-#             )
-#             for i in range(depth)])
-#         self.norm = norm_layer(embed_dim)
-#         self.head = nn.Identity()
-
-#         self.apply(self._init_weights)
-
-#     def _init_weights(self, m):
-#         if isinstance(m, nn.Linear):
-#             nn.init.xavier_uniform_(m.weight)
-#             if isinstance(m, nn.Linear) and m.bias is not None:
-#                 nn.init.constant_(m.bias, 0)
-#         elif isinstance(m, nn.LayerNorm):
-#             nn.init.constant_(m.bias, 0)
-#             nn.init.constant_(m.weight, 1.0)
-
-#     def forward(self, x, pos, return_token_num):
-#         for _, block in enumerate(self.blocks):
-#             x = block(x + pos)
-
-#         x = self.head(self.norm(x[:, -return_token_num:]))  # only return the mask tokens predict pixel
-#         return x
-# Pretrain model
 class MaskTransformer(nn.Module):
     def __init__(self, config, **kwargs):
         super().__init__()
@@ -289,235 +257,138 @@ class MaskTransformer(nn.Module):
 '''
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------
 '''
-def _get_clones(module, N):
-    return ModuleList([copy.deepcopy(module) for i in range(N)])
+def create_decoder(decoder_type, norm_type,
+                   textual_feature_size,
+                   attention_heads,
+                   feedforward_size,
+                   dropout,
+                   num_layers,
+                   output_hidden_states=False,
+                   use_mlp_wrapper=None,
+                   ):
+    assert norm_type in ['post', 'pre']
+    if decoder_type is None:
+        assert NotImplemented
+    elif decoder_type == 'bert_en':
+        from .bert import BertConfig
+        from .bert.modeling_bert import BertEncoder
+        config = BertConfig(
+            vocab_size_or_config_json_file=30522,
+            hidden_size=textual_feature_size,
+            num_hidden_layers=num_layers,
+            num_attention_heads=attention_heads,
+            intermediate_size=feedforward_size,
+            hidden_act="gelu",
+            hidden_dropout_prob=0.1,
+            attention_probs_dropout_prob=0.1,
+            layer_norm_eps=1e-12,
+        )
+        config.pre_norm=(norm_type == 'pre')
+        config.use_mlp_wrapper = use_mlp_wrapper
+        config.output_hidden_states = output_hidden_states
+        encoder = BertEncoder(config)
+        return BertEncoderAsDecoder(encoder)
 
-class TransformerDecoder(Module):
-    r"""TransformerDecoder is a stack of N decoder layers
 
-    Args:
-        decoder_layer: an instance of the TransformerDecoderLayer() class (required).
-        num_layers: the number of sub-decoder-layers in the decoder (required).
-        norm: the layer normalization component (optional).
-
-    Examples::
-        >>> decoder_layer = nn.TransformerDecoderLayer(d_model=512, nhead=8)
-        >>> transformer_decoder = nn.TransformerDecoder(decoder_layer, num_layers=6)
-        >>> memory = torch.rand(10, 32, 512)
-        >>> tgt = torch.rand(20, 32, 512)
-        >>> out = transformer_decoder(tgt, memory)
-    """
-    __constants__ = ['norm']
-
-    def __init__(self, decoder_layer, num_layers, norm=None):
-        super(TransformerDecoder, self).__init__()
-        self.layers = _get_clones(decoder_layer, num_layers)
-        self.num_layers = num_layers
-        self.norm = norm
-
-    def forward(self, tgt, memory, memory2=None, tgt_mask=None,
-                memory_mask=None, tgt_key_padding_mask=None,
-                memory_key_padding_mask=None):
-        # type: (Tensor, Tensor, Optional[Tensor], Optional[Tensor], Optional[Tensor], Optional[Tensor], Optional[Tensor]) -> Tensor
-        r"""Pass the inputs (and mask) through the decoder layer in turn.
-
-        Args:
-            tgt: the sequence to the decoder (required).
-            memory: the sequence from the last layer of the encoder (required).
-            tgt_mask: the mask for the tgt sequence (optional).
-            memory_mask: the mask for the memory sequence (optional).
-            tgt_key_padding_mask: the mask for the tgt keys per batch (optional).
-            memory_key_padding_mask: the mask for the memory keys per batch (optional).
-
-        Shape:
-            see the docs in Transformer class.
-        """
-        output = tgt
-        #print(output)
-        #print('output.shape: ',output.shape)
-        '''output.shape:  torch.Size([60, 10, 256])'''
-        #print('self.layers: ',self.layers )
-        for mod in self.layers:
-            #print('mod: ',mod)
-            output = mod(output, memory, memory2=memory2, tgt_mask=tgt_mask,
-                         memory_mask=memory_mask,
-                         tgt_key_padding_mask=tgt_key_padding_mask,
-                         memory_key_padding_mask=memory_key_padding_mask)
-
-        if self.norm is not None:
-            output = self.norm(output)
-
-        return output
-class TransformerDecoderLayerGlobalImproved(Module):
-    #cfg.d_model, cfg.dim_z, cfg.n_heads, cfg.dim_feedforward, cfg.dropout
-    def __init__(self, d_model, d_global, nhead, dim_feedforward=2048, dropout=0.1, activation="relu", d_global2=None):
-        super(TransformerDecoderLayerGlobalImproved, self).__init__()
-        self.self_attn = MultiheadAttention(d_model, nhead, dropout=dropout)
-
-        self.linear_global = Linear(d_global, d_model)
-
-        if d_global2 is not None:
-            self.linear_global2 = Linear(d_global2, d_model)
-
-        # Implementation of Feedforward model
-        self.linear1 = Linear(d_model, dim_feedforward)
-        self.dropout = Dropout(dropout)
-        self.linear2 = Linear(dim_feedforward, d_model)
-
-        self.norm1 = LayerNorm(d_model)
-        self.norm2 = LayerNorm(d_model)
-        self.dropout1 = Dropout(dropout)
-        self.dropout2 = Dropout(dropout)
-        self.dropout2_2 = Dropout(dropout)
-        self.dropout3 = Dropout(dropout)
-
-        self.activation = _get_activation_fn(activation)
-
-    def __setstate__(self, state):
-        if 'activation' not in state:
-            state['activation'] = F.relu
-        super(TransformerDecoderLayerGlobalImproved, self).__setstate__(state)
-
-    def forward(self, tgt, memory, memory2=None, tgt_mask=None, tgt_key_padding_mask=None, *args, **kwargs):
-
-        '''tgt.shape:  torch.Size([60, 50, 256])'''
-        tgt1 = self.norm1(tgt)
-        '''tgt1.shape:  torch.Size([60, 50, 256])'''
-        tgt2 = self.self_attn(tgt1, tgt1, tgt1, attn_mask=tgt_mask, key_padding_mask=tgt_key_padding_mask)[0]
-        '''tgt2.shape:  torch.Size([60, 50, 256])'''
-        tgt = tgt + self.dropout1(tgt2)
-        '''tgt.shape:  torch.Size([60, 50, 256])'''
-        tgt2 = self.linear_global(memory)
-        '''tgt2.shape:  torch.Size([1, 50, 256])'''
-        tgt = tgt + self.dropout2(tgt2)  # implicit broadcast
-        '''tgt.shape:  torch.Size([60, 50, 256])'''
-        
-        if memory2 is not None:
-            tgt2_2 = self.linear_global2(memory2)
-            tgt = tgt + self.dropout2_2(tgt2_2)
-
-        tgt1 = self.norm2(tgt)
-        '''tgt1.shape:  torch.Size([60, 50, 256])'''
-        tgt2 = self.linear2(self.dropout(self.activation(self.linear1(tgt1))))
-        '''tgt2.shape:  torch.Size([60, 50, 256])'''
-        tgt = tgt + self.dropout3(tgt2)
-        '''tgt.shape:  torch.Size([60, 50, 256])'''
-        return tgt
-class PositionalEncodingLUT(nn.Module):
-
-    def __init__(self, d_model, dropout=0.1, max_len=250):
-        super(PositionalEncodingLUT, self).__init__()
-        self.dropout = nn.Dropout(p=dropout)
-
-        position = torch.arange(0, max_len, dtype=torch.long).unsqueeze(1)
-        self.register_buffer('position', position)
-
-        self.pos_embed = nn.Embedding(max_len, d_model)
-
-        self._init_embeddings()
-
-    def _init_embeddings(self):
-        nn.init.kaiming_normal_(self.pos_embed.weight, mode="fan_in")
-
-    def forward(self, x):
-        #print('x.shape: ',x.shape)
-        '''x.shape:  torch.Size([60, 50, 256])'''
-        
-        pos = self.position[:x.size(0)]
-        #print('pos: ',pos)
-        # print('pos.shape: ',pos.shape)
-        # print('self.pos_embed(pos).shape: ',self.pos_embed(pos).shape)
-        '''pos.shape:  torch.Size([60, 1])
-        self.pos_embed(pos).shape:  torch.Size([60, 1, 256])'''
-        x = x + self.pos_embed(pos)
-        #print('x.shape: ',x.shape)
-        #x.shape:  torch.Size([60, 50, 256])
-        return self.dropout(x)
-    
-class ConstEmbedding(nn.Module):
-    """learned constant embedding"""
-    def __init__(self, cfg, seq_len):
-        super().__init__()
-
-        self.d_model = cfg.d_model
-        self.seq_len = seq_len
-
-        self.PE = PositionalEncodingLUT(cfg.d_model, max_len=seq_len)
-
-    def forward(self, z):
-        N = z.size(1)
-        
-        # np.set_printoptions(threshold=np.inf)
-        #print('z.new_zeros(self.seq_len, N, self.d_model).shape:',z.new_zeros(self.seq_len, N, self.d_model).shape)
-        '''z.new_zeros(self.seq_len, N, self.d_model).shape: torch.Size([60, 50, 256])'''
-        #print('z.new_zeros(self.seq_len, N, self.d_model): ',z.new_zeros(self.seq_len, N, self.d_model)[1,1,:].detach().cpu().numpy())
-        '''all zeros'''
-        src = self.PE(z.new_zeros(self.seq_len, N, self.d_model))
-        return src
-class FCN(nn.Module):
-    def __init__(self, d_model, n_commands, n_args, args_dim=256):
-        super().__init__()
-
-        self.n_args = n_args
-        self.args_dim = args_dim
-
-        self.command_fcn = nn.Linear(d_model, n_commands)
-        self.args_fcn = nn.Linear(d_model, n_args * args_dim)
-
-    def forward(self, out):
-        S, N, _ = out.shape
-
-        command_logits = self.command_fcn(out)  # Shape [S, N, n_commands]
-
-        args_logits = self.args_fcn(out)  # Shape [S, N, n_args * args_dim]
-        args_logits = args_logits.reshape(S, N, self.n_args, self.args_dim)  # Shape [S, N, n_args, args_dim]
-
-        return command_logits, args_logits
-class Bottleneck(nn.Module):
-    def __init__(self, cfg):
-        super(Bottleneck, self).__init__()
-
-        self.bottleneck = nn.Sequential(nn.Linear(cfg.d_model, cfg.dim_z),
-                                        nn.Tanh())
-
-    def forward(self, z):
-        return self.bottleneck(z)
 
 class Decoder(nn.Module):
-    def __init__(self, cfg):
-        super(Decoder, self).__init__()
-
-        self.embedding = ConstEmbedding(cfg, cfg.max_total_len)
-
-        decoder_layer = TransformerDecoderLayerGlobalImproved(cfg.d_model, cfg.dim_z, cfg.n_heads, cfg.dim_feedforward, cfg.dropout)
-        decoder_norm = LayerNorm(cfg.d_model)
-        self.decoder = TransformerDecoder(decoder_layer, cfg.n_layers_decode, decoder_norm)
-
-        args_dim = cfg.args_dim + 1
-        self.fcn = FCN(cfg.d_model, cfg.n_commands, cfg.n_args, args_dim)
-        self.linear = nn.Sequential(
-            nn.Linear(cfg.num_group*cfg.encoder_dims,cfg.dim_z),
-        )
-
-
-        self.bottleneck = Bottleneck(cfg)
-    def forward(self, z):
+    def __init__(self,cfg):
+        super(Decoder,self).__init__()
+        from .bert import BertConfig
+        from .bert.modeling_bert import BertEncoder
         
-        '''linear'''
-        # z = z.view(z.shape[0],-1).unsqueeze(0)
-        # z = self.linear(z)
-        '''max'''
-        z = torch.max(z, dim=1, keepdim=True)[0]
-        z = z.permute(1,0,2)
-        z = self.bottleneck(z)
-        src = self.embedding(z)
-        #print('src.shape: ',src.shape)
-        out = self.decoder(src, z, tgt_mask=None, tgt_key_padding_mask=None)
-        #print('out.shape: ',out.shape)
-        command_logits, args_logits = self.fcn(out)
+        config = BertConfig(
+            vocab_size_or_config_json_file=cfg.ARGS_DIMARGS_DIM+1#256,
+            hidden_size=cfg.textual_feature_size,
+            num_hidden_layers=cfg.num_layers,
+            num_attention_heads=cfg.attention_heads,
+            intermediate_size=cfg.feedforward_size,
+            hidden_act="gelu",
+            hidden_dropout_prob=0.1,
+            attention_probs_dropout_prob=0.1,
+            layer_norm_eps=1e-12,
+        )
+        config.pre_norm=(norm_type == 'pre')
+        config.use_mlp_wrapper = use_mlp_wrapper
+        config.output_hidden_states = output_hidden_states
+        self.decoder  = BertEncoder(config)
+    def forward(self,tgt,memory,
+                tgt_mask=None,
+                #memory_mask=None,
+                tgt_key_padding_mask=None,
+                memory_key_padding_mask=None,
+                tgt_bi_valid_mask=None,
+                encoder_history_states=None,):
+        '''tgt: features from text
+            memory; features frome images'''
+        assert tgt_key_padding_mask is None, 'not supported'
+        assert tgt_mask.dim() == 2
+        assert tgt_mask.shape[0] == tgt_mask.shape[1]
+        # tgt_mask should always be 0/negative infinity
+        # mask
+        print('tgt_mask.shape: ',tgt_mask.shape)
+        '''tgt_mask.shape:  torch.Size([13, 13])'''
+        #print('tgt_key_padding_mask.shape: ',tgt_key_padding_mask.shape)NONE
+        tgt = tgt.transpose(0, 1)
+        memory = memory.transpose(0, 1)
+        # print('tgt.shape: ',tgt.shape)
+        # print('memory.shape: ',memory.shape)
+        '''tgt.shape:  torch.Size([2, 13, 768])
+            memory.shape:  torch.Size([2, 101, 768])'''
+        hidden_states = torch.cat((memory, tgt), dim=1)
+        # print('hidden_states.shape: ',hidden_states.shape)
+        '''hidden_states.shape:  torch.Size([2, 114, 768])'''
+        num_tgt = tgt.shape[1]
+        num_memory = memory.shape[1]
+        device = tgt.device
+        dtype = tgt.dtype
+        top_left = torch.zeros((num_memory, num_memory), device=device, dtype=dtype)
+        #print('top_left.shape: ',top_left.shape)
+        top_right = torch.full((num_memory, num_tgt), float('-inf'), device=tgt.device, dtype=dtype,)
+        #print('top_right.shape: ',top_right.shape)
+        bottom_left = torch.zeros((num_tgt, num_memory), dtype=dtype, device=tgt_mask.device,)
+        #print('bottom_left.shape: ',bottom_left.shape)
+        left = torch.cat((top_left, bottom_left), dim=0)
+        right = torch.cat((top_right, tgt_mask.to(dtype)), dim=0)
+        #print('left.shape: ',left.shape)
+        #print('right.shape: ',right.shape)
 
-        out_logits = (command_logits, args_logits)
-        return out_logits
+        full_attention_mask = torch.cat((left, right), dim=1)[None, :]
+        #print('full_attention_mask.shape: ',full_attention_mask.shape)
+        '''top_left.shape:  torch.Size([101, 101])
+            top_right.shape:  torch.Size([101, 13])
+            bottom_left.shape:  torch.Size([13, 101])
+            left.shape:  torch.Size([114, 101])
+            right.shape:  torch.Size([114, 13])
+            full_attention_mask.shape:  torch.Size([1, 114, 114])'''
+        #print(memory_key_padding_mask) # None
+        if memory_key_padding_mask is None:
+            memory_key_padding_mask = torch.full((memory.shape[0], memory.shape[1]), fill_value=False, device=device)
+        # if it is False, it means valid. That is, it is not a padding
+        assert memory_key_padding_mask.dtype == torch.bool
+        zero_negative_infinity = torch.zeros_like(memory_key_padding_mask, dtype=tgt.dtype)
+        #print('zero_negative_infinity: ',zero_negative_infinity)
+        zero_negative_infinity[memory_key_padding_mask] = float('-inf')
+        #print('zero_negative_infinity2: ',zero_negative_infinity)
+        #print(zero_negative_infinity)
+        full_attention_mask = full_attention_mask.expand((memory_key_padding_mask.shape[0], num_memory + num_tgt, num_memory + num_tgt))
+        full_attention_mask = full_attention_mask.clone()
+        #print(full_attention_mask)
+        origin_left = full_attention_mask[:, :, :num_memory]
+        update = zero_negative_infinity[:, None, :]
+        full_attention_mask[:, :, :num_memory] = origin_left + update
+
+        if tgt_bi_valid_mask is not None:
+            # verify the correctness
+            bs = full_attention_mask.shape[0]
+            # during inference, tgt_bi_valid_mask's length is not changed, but
+            # num_tgt can be increased
+            max_valid_target = tgt_bi_valid_mask.shape[1]
+            mask = tgt_bi_valid_mask[:, None, :].expand((bs, num_memory+num_tgt, max_valid_target))
+            full_attention_mask[:, :, num_memory:(num_memory+max_valid_target)][mask] = 0
+
+        # add axis for multi-head
+        full_attention_mask = full_attention_mask[:, None, :, :]
 # new decoder
 '''
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -708,7 +579,7 @@ class Views2Points(nn.Module):
         feature_3d2.shape:  torch.Size([1, 32, 64, 64, 64])'''
         '''cad_data.shape:  torch.Size([50, 1024, 3])'''
 
-
+        print('cad_data.shape',cad_data.shape)
         data = F.grid_sample(feature_3d, cad_data.view(-1,self.grid_sample,self.grid_sample,self.grid_sample,3), mode='bilinear', padding_mode='zeros', align_corners=None)
         #print('data0.shape: ',data.shape)
         data = data.view(data.shape[0],data.shape[1],-1).permute(0,2,1)
@@ -718,7 +589,7 @@ class Views2Points(nn.Module):
         neighborhood, center = self.group_divider(cad_data)
         
         #print('neighborhood.shape:',neighborhood.shape)
-        '''neighborhood.shape: torch.Size([50, 32, 32, 3])'''
+        '''neighborhood.shape: torch.Size([50, 32, 32, 3])[batchsize]'''
         #print('center.shape:',center.shape)
         '''center.shape: torch.Size([50, 32, 3])'''
         neighborhood = data.view(data.shape[0],self.num_group,self.group_size,3)
@@ -733,6 +604,13 @@ class Views2Points(nn.Module):
         '''pos_full.shape:  torch.Size([50, 32, 128])'''
         z = x_full+pos_full
         text = self.text_encoder(command, args)
+        
+        # print('z.shape: ',z.shape)
+        # print('text.shape: ',text.shape)
+        '''z.shape:  torch.Size([50, 64, 256])[batchsize, num_group, dim]
+            text.shape:  torch.Size([64, 50, 256])[tgt_len ,batchsize, dim]'''
+        text = text.transpose.permute(1,0)
+        
         output = self.MAE_decoder(z)
         out_logits = _make_batch_first(*output)
         res = { 

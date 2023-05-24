@@ -482,6 +482,7 @@ class Decoder(nn.Module):
         z = self.settransformer(z)
         print('z1.shape: ',z.shape)
         z = z.permute(1,0,2)
+
         print('z2.shape: ',z.shape)
         ''''''''''''''''''''''''''''''''''''''''''
         z = self.bottleneck(z)

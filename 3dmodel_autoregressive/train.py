@@ -139,7 +139,7 @@ def main():
             '''cad_data.shape:  torch.Size([50, 1024, 3])'''
             #print('5555555555555555555555555555555555555555')
             with autocast():
-                output = model(front_pic,top_pic,side_pic,cad_data)
+                output = model(front_pic,top_pic,side_pic,cad_data,command,paramaters)
                 #print('output: ',output)
                 #print('6666666666666666666666666666666666666666')
                 output["tgt_commands"] = command
