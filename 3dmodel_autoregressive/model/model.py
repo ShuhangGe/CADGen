@@ -31,6 +31,8 @@ from .attention import MultiheadAttention
 from .transformer import _get_activation_fn
 from .build import MODELS
 from .text_encoder import Text_Encoder
+
+
 class Encoder(nn.Module):   ## Embedding module
     def __init__(self, encoder_channel):
         super().__init__()
@@ -675,8 +677,9 @@ class Views2Points(nn.Module):
         #print_log(f'[Point_MAE] divide point cloud into G{self.num_group} x S{self.group_size} points ...', logger ='Point_MAE')
         self.group_divider = Group(num_group = self.num_group, group_size = self.group_size)
         self.grid_sample = config.grid_sample
+        self.text_encoder = Text_Encoder(config)
 
-    def forward(self,side,front,top,cad_data,command, args):
+    def forward(self, side, front, top, cad_data, command, args):
         # print('model start ')
         # print('side.shape: ',side.shape)
         # print('front.shape: ',front.shape)
@@ -729,6 +732,7 @@ class Views2Points(nn.Module):
         #print('pos_full.shape: ',pos_full.shape)
         '''pos_full.shape:  torch.Size([50, 32, 128])'''
         z = x_full+pos_full
+        text = self.text_encoder(command, args)
         output = self.MAE_decoder(z)
         out_logits = _make_batch_first(*output)
         res = { 

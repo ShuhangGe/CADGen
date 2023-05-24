@@ -1,1 +1,1 @@
-python train.py --data_root /home/shuhang/Desktop/projects/cmdgen/CMDGen/3dmodel/datasets/datalist/my_pc --save_path ../results/test
+python train.py --data_root /home/shuhang/Desktop/projects/cmdgen/CMDGen/3dmodel/datasets/datalist/my_pc --save_path ../results/test 

@@ -9,7 +9,7 @@ class CADEmbedding(nn.Module):
     """Embedding: positional embed + command embed + parameter embed + group embed (optional)"""
     def __init__(self, cfg, seq_len, use_group=False, group_len=None):
         super().__init__()
-
+        #n_commands len(ALL_COMMANDS) d_model 256
         self.command_embed = nn.Embedding(cfg.n_commands, cfg.d_model)
 
         args_dim = cfg.args_dim + 1
@@ -44,14 +44,14 @@ class CADEmbedding(nn.Module):
 class Encoder(nn.Module):
     def __init__(self, cfg):
         super().__init__()
-
+        # max_total_len 60 
         seq_len = cfg.max_total_len
-        self.use_group = cfg.use_group_emb
+        self.use_group = cfg.use_group_emb # True
         self.embedding = CADEmbedding(cfg, seq_len, use_group=self.use_group)
-
+        #d_model 256 n_heads 8 dim_feedforward 512 dropout 0.1
         encoder_layer = TransformerEncoderLayerImproved(cfg.d_model, cfg.n_heads, cfg.dim_feedforward, cfg.dropout)
-        encoder_norm = LayerNorm(cfg.d_model)
-        self.encoder = TransformerEncoder(encoder_layer, cfg.n_layers, encoder_norm)
+        encoder_norm = LayerNorm(cfg.d_model) # 256
+        self.encoder = TransformerEncoder(encoder_layer, cfg.n_layers, encoder_norm)#4
 
     def forward(self, commands, args):
         # print('commands.shape: ',commands.shape)
@@ -87,7 +87,7 @@ class Encoder(nn.Module):
 class Bottleneck(nn.Module):
     def __init__(self, cfg):
         super(Bottleneck, self).__init__()
-
+        # d_model 256 dim_z 256
         self.bottleneck = nn.Sequential(nn.Linear(cfg.d_model, cfg.dim_z),
                                         nn.Tanh())
 
@@ -97,9 +97,9 @@ class Bottleneck(nn.Module):
 
 class Text_Encoder(nn.Module):
     def __init__(self, cfg):
-        super(CADTransformer, self).__init__()
+        super(Text_Encoder, self).__init__()
 
-        self.args_dim = cfg.args_dim + 1
+        self.args_dim = cfg.args_dim + 1# 256
 
         self.encoder = Encoder(cfg)
 

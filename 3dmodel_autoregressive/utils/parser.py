@@ -51,11 +51,11 @@ def get_args():
     #group_size^num_group = npoints
     parser.add_argument('--mask_ratio', type=float, default=0.6)
     parser.add_argument('--mask_type', type=str, default='rand')
-    parser.add_argument('--num_group', type=int, default=40)#64
+    parser.add_argument('--num_group', type=int, default=60)#64
     parser.add_argument('--num_heads', type=int, default=4)#6
-    parser.add_argument('--trans_dim', type=int, default=160)#384
+    parser.add_argument('--trans_dim', type=int, default=240)#384
     '''num_group*num_heads = trans_dim'''
-    parser.add_argument('--encoder_dims', type=int, default=160)#384
+    parser.add_argument('--encoder_dims', type=int, default=240)#384
     parser.add_argument('--depth', type=int, default=12)
     parser.add_argument('--drop_path_rate', type=float, default=0.1)
 
@@ -70,7 +70,7 @@ def get_args():
     parser.add_argument('--n_layers_decode', type=int, default=4)
     parser.add_argument('--n_heads', type=int, default=8)
     parser.add_argument('--dim_feedforward', type=int, default=512)
-    parser.add_argument('--d_model', type=int, default=256)
+    parser.add_argument('--d_model', type=int, default=240)
     parser.add_argument('--dropout', type=float, default=0.1 )
     parser.add_argument('--dim_z', type=int, default=256)
     parser.add_argument('--use_group_emb', type=bool, default=True)
