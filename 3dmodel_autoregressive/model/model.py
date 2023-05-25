@@ -31,7 +31,7 @@ from .attention import MultiheadAttention
 from .transformer import _get_activation_fn
 from .build import MODELS
 from .text_encoder import Text_Encoder
-from bert.modeling_bert improt BertEncoder
+#from bert.modeling_bert improt BertEncoder
 
 class Encoder(nn.Module):   ## Embedding module
     def __init__(self, encoder_channel):
@@ -289,7 +289,25 @@ def create_decoder(decoder_type, norm_type,
         encoder = BertEncoder(config)
         return BertEncoderAsDecoder(encoder)
 
+class FCN(nn.Module):
+    def __init__(self, d_model, n_commands, n_args, args_dim=256):
+        super().__init__()
 
+        self.n_args = n_args
+        self.args_dim = args_dim
+
+        self.command_fcn = nn.Linear(d_model, n_commands)
+        self.args_fcn = nn.Linear(d_model, n_args * args_dim)
+
+    def forward(self, out):
+        S, N, _ = out.shape
+
+        command_logits = self.command_fcn(out)  # Shape [S, N, n_commands]
+
+        args_logits = self.args_fcn(out)  # Shape [S, N, n_args * args_dim]
+        args_logits = args_logits.reshape(S, N, self.n_args, self.args_dim)  # Shape [S, N, n_args, args_dim]
+
+        return command_logits, args_logits
 
 class Decoder(nn.Module):
     def __init__(self,cfg):
@@ -298,20 +316,24 @@ class Decoder(nn.Module):
         from .bert.modeling_bert import BertEncoder
         
         config = BertConfig(
-            vocab_size_or_config_json_file=cfg.ARGS_DIMARGS_DIM+1#256,
-            hidden_size=cfg.textual_feature_size,
-            num_hidden_layers=cfg.num_layers,
-            num_attention_heads=cfg.attention_heads,
-            intermediate_size=cfg.feedforward_size,
+            vocab_size_or_config_json_file=cfg.args_dim, #256,
+            hidden_size=cfg.bert_hidden_size,
+            num_hidden_layers=cfg.bert_num_layers,
+            num_attention_heads=cfg.bert_attention_heads,
+            intermediate_size=cfg.bert_feedforward_size,
             hidden_act="gelu",
             hidden_dropout_prob=0.1,
             attention_probs_dropout_prob=0.1,
             layer_norm_eps=1e-12,
         )
+        norm_type = "post"
+        use_mlp_wrapper=None
+        output_hidden_states=None
         config.pre_norm=(norm_type == 'pre')
         config.use_mlp_wrapper = use_mlp_wrapper
         config.output_hidden_states = output_hidden_states
-        self.decoder  = BertEncoder(config)
+        self.decorde  = BertEncoder(config)
+        self.fcn = FCN(cfg.d_model, cfg.n_commands, cfg.n_args, cfg.args_dim)
     def forward(self,tgt,memory,
                 tgt_mask=None,
                 #memory_mask=None,
@@ -389,6 +411,18 @@ class Decoder(nn.Module):
 
         # add axis for multi-head
         full_attention_mask = full_attention_mask[:, None, :, :]
+        
+        result = self.decorde(
+                hidden_states=hidden_states,
+                attention_mask=full_attention_mask,
+                encoder_history_states=None,
+            )
+        result = list(result)
+        result[0] = result[0][:, num_memory:].transpose(0, 1)
+        command_logits, args_logits = self.fcn(result[0])
+
+        out_logits = (command_logits, args_logits)
+        return out_logits
 # new decoder
 '''
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -512,6 +546,15 @@ class ResnetBlock(nn.Module):
         y = F.relu(y, inplace=True)  # apply ReLU after addition
 
         return y
+def _generate_future_mask(
+         size: int, dtype: torch.dtype, device: torch.device
+    ) -> torch.Tensor:
+        # Default mask is for forward direction. Flip for backward direction.
+        mask = torch.triu(
+            torch.ones(size, size, device=device, dtype=dtype), diagonal=1
+        )
+        mask = mask.masked_fill(mask == 1, float("-inf"))
+        return mask
 @MODELS.register_module()
 class Views2Points(nn.Module):
     '''
@@ -540,10 +583,10 @@ class Views2Points(nn.Module):
             nn.Linear(128, self.trans_dim)
         )
 
-        self.decoder_depth = config.decoder_depth
-        self.decoder_num_heads = config.decoder_num_heads
+        # self.decoder_depth = config.decoder_depth
+        # self.decoder_num_heads = config.decoder_num_heads
         
-        self.MAE_decoder = Decoder(config)
+        self.bert_decoder = Decoder(config)
 
         #print_log(f'[Point_MAE] divide point cloud into G{self.num_group} x S{self.group_size} points ...', logger ='Point_MAE')
         self.group_divider = Group(num_group = self.num_group, group_size = self.group_size)
@@ -604,15 +647,19 @@ class Views2Points(nn.Module):
         '''pos_full.shape:  torch.Size([50, 32, 128])'''
         z = x_full+pos_full
         text = self.text_encoder(command, args)
-        
         # print('z.shape: ',z.shape)
         # print('text.shape: ',text.shape)
         '''z.shape:  torch.Size([50, 64, 256])[batchsize, num_group, dim]
             text.shape:  torch.Size([64, 50, 256])[tgt_len ,batchsize, dim]'''
-        text = text.transpose.permute(1,0)
-        
-        output = self.MAE_decoder(z)
-        out_logits = _make_batch_first(*output)
+        text = text.permute(1,0,2)
+        print('text.shape: ',text.shape)
+        print('z.shape: ',z.shape)
+        future_mask = _generate_future_mask(text.shape[0],text.dtype,text.device)
+        out_logits = self.bert_decoder(text,z,future_mask)
+        print('out_logits[0].shape: ',out_logits[0].shape)
+        print('out_logits[1].shape: ',out_logits[1].shape)
+        #output.shape:  torch.Size([50, 64, 256])
+        #out_logits = _make_batch_first(*output)
         res = { 
             "command_logits": out_logits[0],
             "args_logits": out_logits[1]

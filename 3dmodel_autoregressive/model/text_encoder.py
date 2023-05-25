@@ -26,7 +26,8 @@ class CADEmbedding(nn.Module):
         self.pos_encoding = PositionalEncodingLUT(cfg.d_model, max_len=seq_len+2)
 
     def forward(self, commands, args, groups=None):
-        #print('commands.shape: ',commands.shape)
+        print('commands.shape: ',commands.shape)
+        print('args.shape: ',args.shape)
         '''commands.shape:  torch.Size([60, 10])'''
         S, N = commands.shape
 

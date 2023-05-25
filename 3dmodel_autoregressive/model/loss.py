@@ -40,7 +40,7 @@ class CADLoss(nn.Module):
         super().__init__()
 
         self.n_commands = cfg.n_commands
-        self.args_dim = cfg.args_dim + 1
+        self.args_dim = cfg.args_dim# + 1
         self.weights = cfg.loss_weights
 
         self.register_buffer("cmd_args_mask", torch.tensor(CMD_ARGS_MASK))

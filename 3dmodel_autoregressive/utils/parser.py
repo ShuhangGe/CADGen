@@ -64,7 +64,7 @@ def get_args():
     parser.add_argument('--decoder_num_heads', type=int, default=6)
 
     #decoder paramaters
-    parser.add_argument('--args_dim', type=int, default=256)
+    #parser.add_argument('--args_dim', type=int, default=256)
     parser.add_argument('--n_args', type=int, default=N_ARGS)
     parser.add_argument('--n_commands', type=int, default=len(ALL_COMMANDS))
     parser.add_argument('--n_layers', type=int, default=4)
@@ -80,8 +80,16 @@ def get_args():
     parser.add_argument('--max_n_curves', type=int, default=MAX_N_CURVES)
     parser.add_argument('--max_num_groups', type=int, default=30)
     parser.add_argument('--max_total_len', type=int, default=MAX_TOTAL_LEN)
+    
+    #bert decoder
+    parser.add_argument('--args_dim', type=int, default=ARGS_DIM)
+    parser.add_argument('--bert_num_layers', type=int, default=6)
+    parser.add_argument('--bert_attention_heads', type=int, default=16)
+    parser.add_argument('--bert_feedforward_size', type=int, default=768* 4)
+    parser.add_argument('--bert_hidden_size', type=int, default=256)
 
-    #loss paramaters
+
+    #loss paramatersE
     parser.add_argument('--loss_weights', type=dict, default={
             "loss_cmd_weight": 1.0,
             "loss_args_weight": 2.0
