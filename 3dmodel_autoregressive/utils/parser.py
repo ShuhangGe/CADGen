@@ -21,8 +21,8 @@ def get_args():
     parser.add_argument('--device', type=str, default='GPU')
     parser.add_argument('--epochs', type=int, default=300)
     parser.add_argument('--initial_epochs', type=int, default=10)
-    parser.add_argument('--train_batch', type=int, default=50)
-    parser.add_argument('--test_batch', type=int, default=10)
+    parser.add_argument('--train_batch', type=int, default=32)
+    parser.add_argument('--test_batch', type=int, default=8)
     parser.add_argument('--data_path', type=str, default='../data')
     parser.add_argument('--save_path', type=str, default='../results/exp1')
     parser.add_argument('--log_path', type=str)
@@ -89,7 +89,7 @@ def get_args():
     parser.add_argument('--bert_hidden_size', type=int, default=256)
 
 
-    #loss paramatersE
+    #loss paramaters
     parser.add_argument('--loss_weights', type=dict, default={
             "loss_cmd_weight": 1.0,
             "loss_args_weight": 2.0

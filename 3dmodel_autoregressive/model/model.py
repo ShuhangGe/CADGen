@@ -31,6 +31,7 @@ from .attention import MultiheadAttention
 from .transformer import _get_activation_fn
 from .build import MODELS
 from .text_encoder import Text_Encoder
+
 #from bert.modeling_bert improt BertEncoder
 
 class Encoder(nn.Module):   ## Embedding module
@@ -294,10 +295,11 @@ class FCN(nn.Module):
         super().__init__()
 
         self.n_args = n_args
-        self.args_dim = args_dim
+        self.args_dim = args_dim+ 1
 
         self.command_fcn = nn.Linear(d_model, n_commands)
-        self.args_fcn = nn.Linear(d_model, n_args * args_dim)
+        self.args_fcn = nn.Linear(d_model, n_args * self.args_dim)
+        
 
     def forward(self, out):
         S, N, _ = out.shape
@@ -348,7 +350,7 @@ class Decoder(nn.Module):
         assert tgt_mask.shape[0] == tgt_mask.shape[1]
         # tgt_mask should always be 0/negative infinity
         # mask
-        print('tgt_mask.shape: ',tgt_mask.shape)
+        #print('tgt_mask.shape: ',tgt_mask.shape)
         '''tgt_mask.shape:  torch.Size([13, 13])'''
         #print('tgt_key_padding_mask.shape: ',tgt_key_padding_mask.shape)NONE
         tgt = tgt.transpose(0, 1)
@@ -420,7 +422,8 @@ class Decoder(nn.Module):
         result = list(result)
         result[0] = result[0][:, num_memory:].transpose(0, 1)
         command_logits, args_logits = self.fcn(result[0])
-
+        #print('command_logits: ',command_logits)
+        #print('args_logits: ',args_logits)
         out_logits = (command_logits, args_logits)
         return out_logits
 # new decoder
@@ -433,7 +436,7 @@ class UNet(nn.Module):
     def __init__(self, in_channel=96, out_channel=2, training=True):
         super(UNet, self).__init__()
         self.training = training
-        self.encoder1 = nn.Conv3d(in_channel, 32, 3, stride=1, padding=1)  # b, 16, 10, 10
+        self.encoder1 =  nn.Conv3d(in_channel, 32, 3, stride=1, padding=1)  # b, 16, 10, 10
         self.encoder2=   nn.Conv3d(32, 64, 3, stride=1, padding=1)  # b, 8, 3, 3
         self.encoder3=   nn.Conv3d(64, 128, 3, stride=1, padding=1)
         self.encoder4=   nn.Conv3d(128, 256, 3, stride=1, padding=1)
@@ -451,53 +454,80 @@ class UNet(nn.Module):
             nn.Softmax(dim =1)
         )
 
-        self.map3 = nn.Sequential(
-            nn.Conv3d(64, out_channel, 1, 1),
-            nn.Upsample(scale_factor=(4, 8, 8), mode='trilinear'),
-            nn.Softmax(dim =1)
-        )
-        self.map2 = nn.Sequential(
-            nn.Conv3d(128, out_channel, 1, 1),
-            nn.Upsample(scale_factor=(8, 16, 16), mode='trilinear'),
-            nn.Softmax(dim =1)
-        )
+        # self.map3 = nn.Sequential(
+        #     nn.Conv3d(64, out_channel, 1, 1),
+        #     nn.Upsample(scale_factor=(4, 8, 8), mode='trilinear'),
+        #     nn.Softmax(dim =1)
+        # )
+        # self.map2 = nn.Sequential(
+        #     nn.Conv3d(128, out_channel, 1, 1),
+        #     nn.Upsample(scale_factor=(8, 16, 16), mode='trilinear'),
+        #     nn.Softmax(dim =1)
+        # )
 
-        self.map1 = nn.Sequential(
-            nn.Conv3d(256, out_channel, 1, 1),
-            nn.Upsample(scale_factor=(16, 32, 32), mode='trilinear'),
-            nn.Softmax(dim =1)
-        )
+        # self.map1 = nn.Sequential(
+        #     nn.Conv3d(256, out_channel, 1, 1),
+        #     nn.Upsample(scale_factor=(16, 32, 32), mode='trilinear'),
+        #     nn.Softmax(dim =1)
+        # )
         self.padding = torch.nn.ReplicationPad3d((1, 0, 1, 0, 1, 0))
-
+        self.Tanh = nn.Tanh()
     def forward(self, x):
-
-        out = F.relu(F.max_pool3d(self.encoder1(x),2,2))
+        if torch.isnan(x).any():
+            print('x nan')
+        out = self.Tanh(self.encoder1(x))  
+        if torch.isnan(out).any():
+            print('out nan')
+        out = F.relu(F.max_pool3d(out,2,2))
         t1 = out
+        if torch.isnan(t1).any():
+            print('t1 nan')
         out = F.relu(F.max_pool3d(self.encoder2(out),2,2))
         t2 = out
-        
+        if torch.isnan(t2).any():
+            print('t2 nan')
         out = F.relu(F.max_pool3d(self.encoder3(out),2,2))
         t3 = out
+        if torch.isnan(t3).any():
+            print('t3 nan')
         out = F.relu(F.max_pool3d(self.encoder4(out),2,2))
+        if torch.isnan(out).any():
+            print('out1 nan')
         #output1 = self.map1(out)
         out = F.relu(F.interpolate(self.decoder2(out),scale_factor=(2,2,2),mode ='trilinear'))
+        if torch.isnan(out).any():
+            print('out2 nan')
         out = torch.add(out,t3)
+        if torch.isnan(out).any():
+            print('out3 nan')
         #output2 = self.map2(out)
         #print('out1.shape: ',out.shape)
         out = F.relu(F.interpolate(self.decoder3(out),scale_factor=(2,2,2),mode ='trilinear'))
+        if torch.isnan(out).any():
+            print('out4 nan')
         #print('out2.shape: ',out.shape)
         #print('t2.shape: ',t2.shape)
         if out.shape[-1] !=t2.shape[-1]:
             out = self.padding(out)
             print('out3.shape: ',out.shape)
         out = torch.add(out,t2)
+        if torch.isnan(out).any():
+            print('out4 nan')
         #output3 = self.map3(out)
         out = F.relu(F.interpolate(self.decoder4(out),scale_factor=(2,2,2),mode ='trilinear'))
+        if torch.isnan(out).any():
+            print('out4 nan')
         out = torch.add(out,t1)
+        if torch.isnan(out).any():
+            print('out5 nan')
         #print('out1.shape: ',out.shape)
         out = F.relu(F.interpolate(self.decoder5(out),scale_factor=(2,2,2),mode ='trilinear'))
+        if torch.isnan(out).any():
+            print('out6 nan')
         #print('out2.shape: ',out.shape)
         output4 = self.map4(out)
+        if torch.isnan(out).any():
+            print('out7 nan')
         #print('output4.shape: ',output4.shape)
         return output4
 
@@ -564,19 +594,19 @@ class Views2Points(nn.Module):
     def __init__(self,config):
         super().__init__()
         self.img_feature =ResnetBlock(config.resnet_in,config.resnet_out,2)
-        self.conv3d = nn.Conv3d(in_channels=96,
-                        out_channels=96,
-                        kernel_size=(1, 1, 1),
-                        stride=(1, 1, 1),
-                        padding=0)
-        self.unet = UNet(in_channel=config.resnet_out*3,out_channel=config.UNet_out)
+        # self.conv3d = nn.Conv3d(in_channels=96,
+        #                 out_channels=96,
+        #                 kernel_size=(1, 1, 1),
+        #                 stride=(1, 1, 1),
+        #                 padding=0)
+        self.unet = UNet(config.resnet_out*3,config.UNet_out)
         self.config = config
         self.trans_dim = config.trans_dim #384
         self.MAE_encoder = MaskTransformer(config)
         self.group_size = config.group_size#32
         self.num_group = config.num_group#64
         self.drop_path_rate = config.drop_path_rate#0.1
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, self.trans_dim))
+        #self.mask_token = nn.Parameter(torch.zeros(1, 1, self.trans_dim))
         self.decoder_pos_embed = nn.Sequential(
             nn.Linear(3, 128),
             nn.GELU(),
@@ -600,9 +630,16 @@ class Views2Points(nn.Module):
         # print('top.shape: ',top.shape)
         # print('cad_data.shape: ',cad_data.shape)
         side_feature = self.img_feature(side)
+        if torch.isnan(side_feature).any():
+            print('img_feature1 nan')
         front_feature = self.img_feature(front)
+        if torch.isnan(side_feature).any():
+            print('img_feature2 nan') 
         top_feature = self.img_feature(top)
-        print('side_feature.shape: ',side_feature.shape)
+        if torch.isnan(side_feature).any():
+            print('img_feature3 nan') 
+
+        #print('side_feature.shape: ',side_feature.shape)
         #print('front_features.shape: ',front_feature.shape)
         #print('top_feature.shape: ',top_feature.shape)
         assert side_feature.shape[-1]==front_feature.shape[-1]==top_feature.shape[-1]==side_feature.shape[-2]==front_feature.shape[-2]==top_feature.shape[-2]
@@ -612,24 +649,34 @@ class Views2Points(nn.Module):
         top_3d = top_feature.unsqueeze(-1).repeat(1,1,1,1,repeat_num)
         #print('side_3d.shape: ',side_3d.shape)
         #print('front_3d.shape: ',front_3d.shape)
-        #print('top_3d.shape: ',top_3d.shape)
-        feature_3d = torch.concat((side_3d,front_3d,top_3d),dim=1)
-        #print('feature_3d1.shape: ',feature_3d.shape)
+        print('top_3d.shape: ',top_3d.shape)
+        feature_3d = torch.cat((side_3d,front_3d,top_3d),dim=1)
+        print('feature_3d1.shape: ',feature_3d.shape)
         feature_3d = self.unet(feature_3d)
+        if torch.isnan(feature_3d).any():
+            print('feature_3d_unet nan')
         #print('feature_3d2.shape: ',feature_3d.shape)
         '''side_feature.shape:  torch.Size([1, 32, 64, 64])
         feature_3d1.shape:  torch.Size([1, 96, 64, 64, 64])
         feature_3d2.shape:  torch.Size([1, 32, 64, 64, 64])'''
         '''cad_data.shape:  torch.Size([50, 1024, 3])'''
 
-        print('cad_data.shape',cad_data.shape)
+        #print('cad_data.shape',cad_data.shape)
         data = F.grid_sample(feature_3d, cad_data.view(-1,self.grid_sample,self.grid_sample,self.grid_sample,3), mode='bilinear', padding_mode='zeros', align_corners=None)
+        print('data1.shape: ',data.shape)
+        if torch.isnan(data).any():
+            print('data1 nan')
         #print('data0.shape: ',data.shape)
         data = data.view(data.shape[0],data.shape[1],-1).permute(0,2,1)
+        print('data2.shape: ',data.shape)
+        '''data1.shape:  torch.Size([32, 3, 12, 12, 12])
+        data2.shape:  torch.Size([32, 1728, 3])'''
         #print('data.shape: ',data.shape)
                 #print('pts.shap: ',pts.shape)
         #print('\n','forwardforwardforwardforward','\n')
         neighborhood, center = self.group_divider(cad_data)
+        if torch.isnan(neighborhood).any() or torch.isnan(center).any():
+            print('data1 nan')
         
         #print('neighborhood.shape:',neighborhood.shape)
         '''neighborhood.shape: torch.Size([50, 32, 32, 3])[batchsize]'''
@@ -637,27 +684,37 @@ class Views2Points(nn.Module):
         '''center.shape: torch.Size([50, 32, 3])'''
         neighborhood = data.view(data.shape[0],self.num_group,self.group_size,3)
         x_full= self.MAE_encoder(neighborhood, center)
+        if torch.isnan(x_full).any():
+            print('x_full nan')
         
         #print('x_full.shape: ',x_full.shape)
         '''x_full.shape:  torch.Size([50, 32, 128])'''
         B,_,C = x_full.shape # B VIS C
 
         pos_full = self.decoder_pos_embed(center).reshape(B, -1, C)
+        if torch.isnan(pos_full).any():
+            print('pos_full nan')
         #print('pos_full.shape: ',pos_full.shape)
         '''pos_full.shape:  torch.Size([50, 32, 128])'''
         z = x_full+pos_full
         text = self.text_encoder(command, args)
+        if torch.isnan(text).any():
+            print('text nan')
         # print('z.shape: ',z.shape)
         # print('text.shape: ',text.shape)
         '''z.shape:  torch.Size([50, 64, 256])[batchsize, num_group, dim]
             text.shape:  torch.Size([64, 50, 256])[tgt_len ,batchsize, dim]'''
         text = text.permute(1,0,2)
-        print('text.shape: ',text.shape)
-        print('z.shape: ',z.shape)
+        #print('text.shape: ',text.shape)
+        #print('z.shape: ',z.shape)
         future_mask = _generate_future_mask(text.shape[0],text.dtype,text.device)
+        if torch.isnan(future_mask).any():
+            print('future_mask nan')
         out_logits = self.bert_decoder(text,z,future_mask)
-        print('out_logits[0].shape: ',out_logits[0].shape)
-        print('out_logits[1].shape: ',out_logits[1].shape)
+        if torch.isnan(out_logits[0]).any() or torch.isnan(out_logits[1]).any():
+            print('out_logits nan')
+        #print('out_logits[0].shape: ',out_logits[0].shape)
+        #print('out_logits[1].shape: ',out_logits[1].shape)
         #output.shape:  torch.Size([50, 64, 256])
         #out_logits = _make_batch_first(*output)
         res = { 

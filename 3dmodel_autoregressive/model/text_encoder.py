@@ -15,7 +15,7 @@ class CADEmbedding(nn.Module):
         args_dim = cfg.args_dim + 1
         self.arg_embed = nn.Embedding(args_dim, 64, padding_idx=0)
         self.embed_fcn = nn.Linear(64 * cfg.n_args, cfg.d_model)
-
+        #self.n_args1 = 64 * cfg.n_args
         # use_group: additional embedding for each sketch-extrusion pair
         self.use_group = use_group
         if use_group:
@@ -26,14 +26,39 @@ class CADEmbedding(nn.Module):
         self.pos_encoding = PositionalEncodingLUT(cfg.d_model, max_len=seq_len+2)
 
     def forward(self, commands, args, groups=None):
-        print('commands.shape: ',commands.shape)
-        print('args.shape: ',args.shape)
+        #print('commands.shape: ',commands.shape)
+        #print('args.shape: ',args.shape)
         '''commands.shape:  torch.Size([60, 10])'''
+        # if torch.isnan(commands).any():
+        #     print('commands is nan')
+        # if torch.isnan(args).any():
+        #     print('args is nan')
         S, N = commands.shape
+        # print('commands.shape: ',commands.shape)
+        # print('args.shape: ',args.shape)
+        src1 = self.command_embed(commands.long()) 
+        # if torch.isnan(src1).any():
+        #     print('src1 is nan')
+        # print('src1.shape: ',src1.shape)
+        args = args + 1
+        #print('args: ',args)
+        src2 = self.arg_embed((args).long())
+        # if torch.isnan(src2).any():
+        #     print('src21 is nan')
+        # print('src21.shape: ',src2.shape)
+        src2 = src2.view(S, N, -1)
+        # if torch.isnan(src2).any():
+        #     print('src22 is nan')
+        # print('src22.shape: ',src2.shape)
+        #print('self.n_args1: ',self.n_args1)
 
-        src = self.command_embed(commands.long()) + \
-              self.embed_fcn(self.arg_embed((args + 1).long()).view(S, N, -1))  # shift due to -1 PAD_VAL
-
+        #print('src2.detach().cpu().numpy(): ',src2.detach().cpu().numpy())
+        src2 = self.embed_fcn(src2)  # shift due to -1 PAD_VAL
+        # if torch.isnan(src2).any():
+        #     print('src2 is nan', src2)
+        # print('src2.shape: ',src2.shape)
+        src = src1 + src2
+        #print('src.shape: ',src.shape)
         if self.use_group:
             src = src + self.group_embed(groups.long())
 
@@ -70,6 +95,7 @@ class Encoder(nn.Module):
         '''
         
         group_mask = _get_group_mask(commands, seq_dim=0) if self.use_group else None
+        #print('group_mask.shape', group_mask.shape)
         src = self.embedding(commands, args, group_mask)
         memory = self.encoder(src, mask=None, src_key_padding_mask=key_padding_mask)
         # print('group_mask.shape: ',group_mask.shape)

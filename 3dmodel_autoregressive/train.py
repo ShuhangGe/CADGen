@@ -20,6 +20,7 @@ import numpy as np
 #from apex import amp
 from torch.cuda.amp import autocast as autocast
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+#os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 # utils
 
 
@@ -85,7 +86,10 @@ def main():
     #print('args: ',args)
     #print('000000000000000000000000000000000')
     # CUDA
-    args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if args.device == 'GPU':
+        args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    else:
+        args.device = torch.device('cpu')
     train_data = CADGENdataset(args,test=False)
     #print('1111111111111111111111111111111111111111111')
     test_data = CADGENdataset(args,test=True)
@@ -144,8 +148,9 @@ def main():
                 #print('6666666666666666666666666666666666666666')
                 output["tgt_commands"] = command
                 output["tgt_args"] = paramaters
-
                 loss_dict = loss_fun(output)
+            # with autocast():
+                
             print('len(train_loader): ',len(train_loader),'index: ',index)
             loss_cmd_train += loss_dict["loss_cmd"]
             loss_args_train += loss_dict["loss_args"]
@@ -154,10 +159,15 @@ def main():
             #print('loss_dict.values(): ',loss_dict.values())
             loss = sum(loss_dict.values())
             optimizer.zero_grad()
-
-            loss.backward()
-            optimizer.step()
             print('loss: ',loss)
+            loss.backward()
+            for name, param in model.named_parameters():
+                #print('name: ',name)
+                #print('param.grad: ',param.grad)
+                
+                print(name, torch.isfinite(param.grad).all())
+            optimizer.step()
+            
         loss_cmd_train = loss_cmd_train/train_num
         loss_args_train = loss_args_train/train_num     
         writer.add_scalar('loss_cmd_train', loss_cmd_train, global_step=epoch)
@@ -191,6 +201,9 @@ def main():
                     loss_cmd_test += loss_dict["loss_cmd"]
                     loss_args_test += loss_dict["loss_args"]
                     loss_test = sum(loss_dict_test.values())
+                #with autocast():
+                    
+                    
                 test_num += 1
                 print('loss_test: ',loss_test)
         loss_cmd_test = loss_cmd_test / test_num  
