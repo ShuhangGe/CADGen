@@ -35,7 +35,7 @@ class CADGENdataset(data.Dataset):
         self.h5_root = cfg.cmd_root
         self.transforms = transforms.Compose([
             transforms.ToTensor(),
-            
+            transforms.Resize([200, 200])
         ])
         self.max_total_len  = MAX_TOTAL_LEN
         self.sample_points_num = cfg.npoints

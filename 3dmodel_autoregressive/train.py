@@ -20,7 +20,7 @@ import numpy as np
 #from apex import amp
 from torch.cuda.amp import autocast as autocast
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
-#os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 # utils
 
 
@@ -95,12 +95,12 @@ def main():
     test_data = CADGENdataset(args,test=True)
     train_loader = torch.utils.data.DataLoader(train_data,
                                             batch_size=args.train_batch,
-                                            shuffle=True,
+                                            shuffle=False,
                                             num_workers=args.num_workers)
     #print('2222222222222222222222222222222222222222222222222222222')
     test_loader = torch.utils.data.DataLoader(test_data,
                                                batch_size=args.test_batch,
-                                               shuffle=True,
+                                               shuffle=False,
                                                num_workers=args.num_workers)
     #print('33333333333333333333333333333333333333333333333333')
     model = Views2Points(args)
@@ -132,6 +132,7 @@ def main():
 
         for index, data in enumerate(train_loader,0):
             #print('000000000000000000000000000000000')
+            print('data_id: ', data['id'])
             model.train()
             front_pic,top_pic,side_pic,cad_data,command,paramaters = data['data']
             front_pic = front_pic.to(args.device)
@@ -164,8 +165,8 @@ def main():
             for name, param in model.named_parameters():
                 #print('name: ',name)
                 #print('param.grad: ',param.grad)
-                
-                print(name, torch.isfinite(param.grad).all())
+                if not torch.isfinite(param.grad).all():
+                    print(name, torch.isfinite(param.grad).all())
             optimizer.step()
             
         loss_cmd_train = loss_cmd_train/train_num

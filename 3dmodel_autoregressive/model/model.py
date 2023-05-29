@@ -435,8 +435,9 @@ class Decoder(nn.Module):
 class UNet(nn.Module):
     def __init__(self, in_channel=96, out_channel=2, training=True):
         super(UNet, self).__init__()
+        self.in_channel = in_channel
         self.training = training
-        self.encoder1 =  nn.Conv3d(in_channel, 32, 3, stride=1, padding=1)  # b, 16, 10, 10
+        self.encoder1 =  nn.Sequential(nn.Conv3d(in_channel, 64, 3, stride=1, padding=1),nn.Conv3d(64, 32, 3, stride=1, padding=1))  # b, 16, 10, 10
         self.encoder2=   nn.Conv3d(32, 64, 3, stride=1, padding=1)  # b, 8, 3, 3
         self.encoder3=   nn.Conv3d(64, 128, 3, stride=1, padding=1)
         self.encoder4=   nn.Conv3d(128, 256, 3, stride=1, padding=1)
@@ -473,62 +474,44 @@ class UNet(nn.Module):
         self.padding = torch.nn.ReplicationPad3d((1, 0, 1, 0, 1, 0))
         self.Tanh = nn.Tanh()
     def forward(self, x):
-        if torch.isnan(x).any():
-            print('x nan')
-        out = self.Tanh(self.encoder1(x))  
-        if torch.isnan(out).any():
-            print('out nan')
+        #print('self.in_channel: ',self.in_channel)
+        #print('x: ', x.shape)
+        out = self.encoder1(x)
+        #print('out1.shape: ',out.shape)
         out = F.relu(F.max_pool3d(out,2,2))
         t1 = out
-        if torch.isnan(t1).any():
-            print('t1 nan')
+        #print('t1.shape: ',t1.shape)
         out = F.relu(F.max_pool3d(self.encoder2(out),2,2))
         t2 = out
-        if torch.isnan(t2).any():
-            print('t2 nan')
+        #print('t2.shape: ',t2.shape)
         out = F.relu(F.max_pool3d(self.encoder3(out),2,2))
         t3 = out
-        if torch.isnan(t3).any():
-            print('t3 nan')
+        #print('t3.shape: ',t3.shape)
         out = F.relu(F.max_pool3d(self.encoder4(out),2,2))
-        if torch.isnan(out).any():
-            print('out1 nan')
+        #print('out2.shape: ',out.shape)
         #output1 = self.map1(out)
         out = F.relu(F.interpolate(self.decoder2(out),scale_factor=(2,2,2),mode ='trilinear'))
-        if torch.isnan(out).any():
-            print('out2 nan')
+        #print('out3.shape: ',out.shape)
         out = torch.add(out,t3)
-        if torch.isnan(out).any():
-            print('out3 nan')
         #output2 = self.map2(out)
-        #print('out1.shape: ',out.shape)
+
         out = F.relu(F.interpolate(self.decoder3(out),scale_factor=(2,2,2),mode ='trilinear'))
-        if torch.isnan(out).any():
-            print('out4 nan')
-        #print('out2.shape: ',out.shape)
-        #print('t2.shape: ',t2.shape)
+        #print('out4.shape: ',out.shape)
         if out.shape[-1] !=t2.shape[-1]:
             out = self.padding(out)
-            print('out3.shape: ',out.shape)
+            #print('out5.shape: ',out.shape)
         out = torch.add(out,t2)
-        if torch.isnan(out).any():
-            print('out4 nan')
         #output3 = self.map3(out)
         out = F.relu(F.interpolate(self.decoder4(out),scale_factor=(2,2,2),mode ='trilinear'))
-        if torch.isnan(out).any():
-            print('out4 nan')
+        #print('out6.shape: ',out.shape)
         out = torch.add(out,t1)
-        if torch.isnan(out).any():
-            print('out5 nan')
-        #print('out1.shape: ',out.shape)
+
         out = F.relu(F.interpolate(self.decoder5(out),scale_factor=(2,2,2),mode ='trilinear'))
-        if torch.isnan(out).any():
-            print('out6 nan')
-        #print('out2.shape: ',out.shape)
+        #print('out7.shape: ',out.shape)
+
         output4 = self.map4(out)
-        if torch.isnan(out).any():
-            print('out7 nan')
         #print('output4.shape: ',output4.shape)
+
         return output4
 
 class ResnetBlock(nn.Module):
@@ -567,13 +550,30 @@ class ResnetBlock(nn.Module):
             self.shortcut.add_module('bn', nn.BatchNorm2d(out_channels))  # BN
 
     def forward(self, x):
+        if torch.isnan(x).any():
+            print('x nan')
+        print('x.shape: ',x.shape)
         x = self.conv0(x)
+        if torch.isnan(x).any():
+            print('x1 nan')
         x = self.bn0(x)
+        if torch.isnan(x).any():
+            print('x2 nan')
         x = F.relu(x)
+        if torch.isnan(x).any():
+            print('x3 nan')
         y = F.relu(self.bn1(self.conv1(x)), inplace=True)
+        if torch.isnan(y).any():
+            print('y1 nan')
         y = self.bn2(self.conv2(y))
+        if torch.isnan(y).any():
+            print('y2 nan')
         y += self.shortcut(x)
+        if torch.isnan(y).any():
+            print('y3 nan')
         y = F.relu(y, inplace=True)  # apply ReLU after addition
+        if torch.isnan(y).any():
+            print('y4 nan')
 
         return y
 def _generate_future_mask(
@@ -629,6 +629,12 @@ class Views2Points(nn.Module):
         # print('front.shape: ',front.shape)
         # print('top.shape: ',top.shape)
         # print('cad_data.shape: ',cad_data.shape)
+        if torch.isnan(side).any():
+            print('side nan')
+        if torch.isnan(front).any():
+            print('front nan')
+        if torch.isnan(top).any():
+            print('top nan')
         side_feature = self.img_feature(side)
         if torch.isnan(side_feature).any():
             print('img_feature1 nan')
@@ -649,9 +655,9 @@ class Views2Points(nn.Module):
         top_3d = top_feature.unsqueeze(-1).repeat(1,1,1,1,repeat_num)
         #print('side_3d.shape: ',side_3d.shape)
         #print('front_3d.shape: ',front_3d.shape)
-        print('top_3d.shape: ',top_3d.shape)
+        #print('top_3d.shape: ',top_3d.shape)
         feature_3d = torch.cat((side_3d,front_3d,top_3d),dim=1)
-        print('feature_3d1.shape: ',feature_3d.shape)
+        ##print('feature_3d1.shape: ',feature_3d.shape)
         feature_3d = self.unet(feature_3d)
         if torch.isnan(feature_3d).any():
             print('feature_3d_unet nan')
@@ -663,7 +669,7 @@ class Views2Points(nn.Module):
 
         #print('cad_data.shape',cad_data.shape)
         data = F.grid_sample(feature_3d, cad_data.view(-1,self.grid_sample,self.grid_sample,self.grid_sample,3), mode='bilinear', padding_mode='zeros', align_corners=None)
-        print('data1.shape: ',data.shape)
+        #print('data1.shape: ',data.shape)
         if torch.isnan(data).any():
             print('data1 nan')
         #print('data0.shape: ',data.shape)
@@ -731,9 +737,9 @@ class Views2Points(nn.Module):
 if __name__=='__main__':
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     cfg = parser.get_args()
-    side = torch.rand(1,3,64,64).to(device)  
-    front = torch.rand(1,3,64,64).to(device)
-    top = torch.rand(1,3,64,64).to(device)
+    side = torch.full((1,3,200,200),255).to(device)  
+    front = torch.full((1,3,200,200),255).to(device)
+    top = torch.full((1,3,200,200),255).to(device)
     cad_data = torch.rand(1, 1024, 3).to(device)
     '''
     side((x),y,z)
