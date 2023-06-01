@@ -19,11 +19,95 @@ import torch.optim as optim
 import numpy as np
 #from apex import amp
 from torch.cuda.amp import autocast as autocast
+import logging
+from logging import handlers
+
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 # utils
 
+class Logger(object):
+    level_relations = {
+        'debug':logging.DEBUG,
+        'info':logging.INFO,
+        'warning':logging.WARNING,
+        'error':logging.ERROR,
+        'crit':logging.CRITICAL
+    }#日志级别关系映射
 
+    def __init__(self,filename,level='info',when='D',backCount=3,fmt='%(asctime)s - %(pathname)s[line:%(lineno)d] - %(levelname)s: %(message)s'):
+        self.logger = logging.getLogger(filename)
+        format_str = logging.Formatter(fmt)#设置日志格式
+        self.logger.setLevel(self.level_relations.get(level))#设置日志级别
+        # sh = logging.StreamHandler()#往屏幕上输出
+        # sh.setFormatter(format_str) #设置屏幕上显示的格式
+        th = handlers.TimedRotatingFileHandler(filename=filename,when=when,backupCount=backCount,encoding='utf-8')#往文件里写入#指定间隔时间自动生成文件的处理器
+        #实例化TimedRotatingFileHandler
+        #interval是时间间隔，backupCount是备份文件的个数，如果超过这个个数，就会自动删除，when是间隔的时间单位，单位有以下几种：
+        # S 秒
+        # M 分
+        # H 小时、
+        # D 天、
+        # W 每星期（interval==0时代表星期一）
+        # midnight 每天凌晨
+        th.setFormatter(format_str)#设置文件里写入的格式
+        #self.logger.addHandler(sh) #把对象加到logger里
+        self.logger.addHandler(th)
+
+def collate_fn(batch):
+    '''
+     collate_fn (callable, optional): merges a list of samples to form a mini-batch.
+     该函数参考touch的default_collate函数，也是DataLoader的默认的校对方法，当batch中含有None等数据时，
+     默认的default_collate校队方法会出现错误
+     一种的解决方法是：
+     判断batch中image是否为None,如果为None，则在原来的batch中清除掉，这样就可以在迭代中避免出错了
+    :param batch:
+    :return:
+    '''
+    r"""Puts each data field into a tensor with outer dimension batch size"""
+    # 这里添加：判断image是否为None,如果为None，则在原来的batch中清除掉，这样就可以在迭代中避免出错了
+    if isinstance(batch, list):
+        batch = [(image, image_id) for (image, image_id) in batch if image is not None]
+    if batch==[]:
+        return (None,None)
+ 
+    elem_type = type(batch[0])
+    if isinstance(batch[0], torch.Tensor):
+        out = None
+        if _use_shared_memory:
+            # If we're in a background process, concatenate directly into a
+            # shared memory tensor to avoid an extra copy
+            numel = sum([x.numel() for x in batch])
+            storage = batch[0].storage()._new_shared(numel)
+            out = batch[0].new(storage)
+        return torch.stack(batch, 0, out=out)
+    elif elem_type.__module__ == 'numpy' and elem_type.__name__ != 'str_' \
+            and elem_type.__name__ != 'string_':
+        elem = batch[0]
+        if elem_type.__name__ == 'ndarray':
+            # array of string classes and object
+            if np_str_obj_array_pattern.search(elem.dtype.str) is not None:
+                raise TypeError(error_msg_fmt.format(elem.dtype))
+ 
+            return collate_fn([torch.from_numpy(b) for b in batch])
+        if elem.shape == ():  # scalars
+            py_type = float if elem.dtype.name.startswith('float') else int
+            return numpy_type_map[elem.dtype.name](list(map(py_type, batch)))
+    elif isinstance(batch[0], float):
+        return torch.tensor(batch, dtype=torch.float64)
+    elif isinstance(batch[0], int_classes):
+        return torch.tensor(batch)
+    elif isinstance(batch[0], string_classes):
+        return batch
+    elif isinstance(batch[0], container_abcs.Mapping):
+        return {key: collate_fn([d[key] for d in batch]) for key in batch[0]}
+    elif isinstance(batch[0], tuple) and hasattr(batch[0], '_fields'):  # namedtuple
+        return type(batch[0])(*(collate_fn(samples) for samples in zip(*batch)))
+    elif isinstance(batch[0], container_abcs.Sequence):
+        transposed = zip(*batch)#ok
+        return [collate_fn(samples) for samples in transposed]
+ 
+    raise TypeError((error_msg_fmt.format(type(batch[0]))))
 
 
 def build_opti_sche(base_model, config):
@@ -161,13 +245,19 @@ def main():
             loss = sum(loss_dict.values())
             optimizer.zero_grad()
             print('loss: ',loss)
+            # with torch.autograd.detect_anomaly():
             loss.backward()
+            
+            #logname = '/scratch/sg7484/CMDGen/results/paramaters' + f'/log_{index}.log'
+            #log = Logger(logname,level='debug')
+
             for name, param in model.named_parameters():
-                #print('name: ',name)
-                #print('param.grad: ',param.grad)
+                #log.logger.info(f'-->name: {name}, -->grad_requirs: {param.requires_grad},-->grad_value: {param.grad},\n')
                 if not torch.isfinite(param.grad).all():
                     print(name, torch.isfinite(param.grad).all())
+            #torch.save(model.state_dict(), f'/scratch/sg7484/CMDGen/results/paramaters/paramater_{index}')
             optimizer.step()
+            #torch.save(model.state_dict(), f'/scratch/sg7484/CMDGen/results/paramaters/paramater_after_{index}')
             
         loss_cmd_train = loss_cmd_train/train_num
         loss_args_train = loss_args_train/train_num     

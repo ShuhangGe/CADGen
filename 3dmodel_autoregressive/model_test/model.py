@@ -1,14 +1,24 @@
 import sys 
 sys.path.append("..") 
-from .attention import MultiheadAttention
-from .transformer import _get_activation_fn
-from .build import MODELS
-from .text_encoder import Text_Encoder
-#from extensions.chamfer_dist import ChamferDistanceL1, ChamferDistanceL2
-from .model_utils import _make_seq_first, _make_batch_first, \
-    _get_padding_mask, _get_key_padding_mask, _get_group_mask
-from .unet3d import ResidualUNet3D
+# from .attention import MultiheadAttention
+# from .transformer import _get_activation_fn
+# from .build import MODELS
+# from .text_encoder import Text_Encoder
+# #from extensions.chamfer_dist import ChamferDistanceL1, ChamferDistanceL2
+# from .model_utils import _make_seq_first, _make_batch_first, \
+#     _get_padding_mask, _get_key_padding_mask, _get_group_mask
 
+from attention import MultiheadAttention
+from transformer import _get_activation_fn
+from build import MODELS
+from text_encoder import Text_Encoder
+#from extensions.chamfer_dist import ChamferDistanceL1, ChamferDistanceL2
+from model_utils import _make_seq_first, _make_batch_first, \
+    _get_padding_mask, _get_key_padding_mask, _get_group_mask
+from bert import BertConfig
+from bert.modeling_bert import BertEncoder
+        
+sys.path.append("/scratch/sg7484/CMDGen/3dmodel_autoregressive") 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -34,7 +44,8 @@ from torch.nn.modules.dropout import Dropout
 from torch.nn.modules.linear import Linear
 from torch.nn.modules.normalization import LayerNorm
 import utils.parser as parser
-
+from PIL import Image
+import torchvision.transforms as transforms
 
 #from bert.modeling_bert improt BertEncoder
 
@@ -318,8 +329,7 @@ class FCN(nn.Module):
 class Decoder(nn.Module):
     def __init__(self,cfg):
         super(Decoder,self).__init__()
-        from .bert import BertConfig
-        from .bert.modeling_bert import BertEncoder
+
         
         config = BertConfig(
             vocab_size_or_config_json_file=cfg.args_dim, #256,
@@ -518,160 +528,69 @@ class UNet(nn.Module):
 
         return output4
 
-# class ResnetBlock(nn.Module):
-#     def __init__(self, in_channels, out_channels, stride):
-#         super(ResnetBlock, self).__init__()
-#         self.conv0 = nn.Conv2d(3, in_channels, kernel_size=1, bias=False)
-#         self.bn0 = nn.BatchNorm2d(in_channels)
-#         self.conv1 = nn.Conv2d(
-#             in_channels,
-#             out_channels,
-#             kernel_size=3,
-#             stride=stride,  # downsample with first conv
-#             padding=1,
-#             bias=False)
-#         self.bn1 = nn.BatchNorm2d(out_channels)
-#         self.conv2 = nn.Conv2d(
-#             out_channels,
-#             out_channels,
-#             kernel_size=3,
-#             stride=1,
-#             padding=1,
-#             bias=False)
-#         self.bn2 = nn.BatchNorm2d(out_channels)
+class ResnetBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, stride):
+        super(ResnetBlock, self).__init__()
+        self.conv0 = nn.Conv2d(3, in_channels, kernel_size=1, bias=False)
+        self.bn0 = nn.BatchNorm2d(in_channels)
+        self.conv1 = nn.Conv2d(
+            in_channels,
+            out_channels,
+            kernel_size=3,
+            stride=stride,  # downsample with first conv
+            padding=1,
+            bias=False)
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.conv2 = nn.Conv2d(
+            out_channels,
+            out_channels,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+            bias=False)
+        self.bn2 = nn.BatchNorm2d(out_channels)
 
-#         self.shortcut = nn.Sequential()
-#         if in_channels != out_channels:
-#             self.shortcut.add_module(
-#                 'conv',
-#                 nn.Conv2d(
-#                     in_channels,
-#                     out_channels,
-#                     kernel_size=1,
-#                     stride=stride,  # downsample
-#                     padding=0,
-#                     bias=False))
-#             self.shortcut.add_module('bn', nn.BatchNorm2d(out_channels))  # BN
-
-#     def forward(self, x):
-#         if torch.isnan(x).any():
-#             print('x nan')
-#         print('x.shape: ',x.shape)
-#         x = self.conv0(x)
-#         #print(x)
-#         if torch.isnan(x).any():
-#             print('x1 nan')
-#         x = self.bn0(x)
-#         if torch.isnan(x).any():
-#             print('x2 nan')
-#         x = F.relu(x)
-#         if torch.isnan(x).any():
-#             print('x3 nan')
-#         y = F.relu(self.bn1(self.conv1(x)), inplace=True)
-#         if torch.isnan(y).any():
-#             print('y1 nan')
-#         y = self.bn2(self.conv2(y))
-#         if torch.isnan(y).any():
-#             print('y2 nan')
-#         y += self.shortcut(x)
-#         if torch.isnan(y).any():
-#             print('y3 nan')
-#         y = F.relu(y, inplace=True)  # apply ReLU after addition
-#         if torch.isnan(y).any():
-#             print('y4 nan')
-
-#         return y
-
-class Bottleneck(nn.Module):
-    def __init__(self,in_channels,out_channels,stride=[1,1,1],padding=[0,1,0],first=False) -> None:
-        super(Bottleneck,self).__init__()
-        self.bottleneck = nn.Sequential(
-            nn.Conv2d(in_channels,out_channels,kernel_size=1,stride=stride[0],padding=padding[0],bias=False),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True), # 原地替换 节省内存开销
-            nn.Conv2d(out_channels,out_channels,kernel_size=3,stride=stride[1],padding=padding[1],bias=False),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True), # 原地替换 节省内存开销
-            nn.Conv2d(out_channels,out_channels*4,kernel_size=1,stride=stride[2],padding=padding[2],bias=False),
-            nn.BatchNorm2d(out_channels*4)
-        )
-
-        # shortcut 部分
-        # 由于存在维度不一致的情况 所以分情况
         self.shortcut = nn.Sequential()
-        if first:
-            self.shortcut = nn.Sequential(
-                # 卷积核为1 进行升降维
-                # 注意跳变时 都是stride==2的时候 也就是每次输出信道升维的时候
-                nn.Conv2d(in_channels, out_channels*4, kernel_size=1, stride=stride[1], bias=False),
-                nn.BatchNorm2d(out_channels*4)
-            )
-        # if stride[1] != 1 or in_channels != out_channels:
-        #     self.shortcut = nn.Sequential(
-        #         # 卷积核为1 进行升降维
-        #         # 注意跳变时 都是stride==2的时候 也就是每次输出信道升维的时候
-        #         nn.Conv2d(in_channels, out_channels*4, kernel_size=1, stride=stride[1], bias=False),
-        #         nn.BatchNorm2d(out_channels)
-        #     )
-    def forward(self, x):
-        out = self.bottleneck(x)
-        out += self.shortcut(x)
-        out = F.relu(out)
-        return out
-
-# 采用bn的网络中，卷积层的输出并不加偏置
-class ResNet50(nn.Module):
-    def __init__(self,Bottleneck, resnet_out, num_classes=10) -> None:
-        super(ResNet50, self).__init__()
-        self.in_channels = 64
-        # 第一层作为单独的 因为没有残差快
-        self.conv1 = nn.Sequential(
-            nn.Conv2d(3,64,kernel_size=7,stride=2,padding=3,bias=False),
-            nn.BatchNorm2d(64),
-            nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        )
-
-        # conv2
-        self.conv2 = self._make_layer(Bottleneck,64,[[1,1,1]]*3,[[0,1,0]]*3)
-
-        # conv3
-        self.conv3 = self._make_layer(Bottleneck,128,[[1,2,1]] + [[1,1,1]]*3,[[0,1,0]]*4)
-
-        # conv4
-        self.conv4 = self._make_layer(Bottleneck,256,[[1,2,1]] + [[1,1,1]]*5,[[0,1,0]]*6)
-
-        # conv5
-        self.conv5 = self._make_layer(Bottleneck,resnet_out,[[1,2,1]] + [[1,1,1]]*2,[[0,1,0]]*3)
-
-        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.fc = nn.Linear(2048, num_classes)
-
-    def _make_layer(self,block,out_channels,strides,paddings):
-        layers = []
-        # 用来判断是否为每个block层的第一层
-        flag = True
-        for i in range(0,len(strides)):
-            layers.append(block(self.in_channels,out_channels,strides[i],paddings[i],first=flag))
-            flag = False
-            self.in_channels = out_channels * 4
-            
-
-        return nn.Sequential(*layers)
+        if in_channels != out_channels:
+            self.shortcut.add_module(
+                'conv',
+                nn.Conv2d(
+                    in_channels,
+                    out_channels,
+                    kernel_size=1,
+                    stride=stride,  # downsample
+                    padding=0,
+                    bias=False))
+            self.shortcut.add_module('bn', nn.BatchNorm2d(out_channels))  # BN
 
     def forward(self, x):
-        out = self.conv1(x)
-        out = self.conv2(out)
-        out = self.conv3(out)
-        out = self.conv4(out)
-        out = self.conv5(out)
+        if torch.isnan(x).any():
+            print('x nan')
+        print('x.shape: ',x.shape)
+        x = self.conv0(x)
+        #print(x)
+        if torch.isnan(x).any():
+            print('x1 nan')
+        x = self.bn0(x)
+        if torch.isnan(x).any():
+            print('x2 nan')
+        x = F.relu(x)
+        if torch.isnan(x).any():
+            print('x3 nan')
+        y = F.relu(self.bn1(self.conv1(x)), inplace=True)
+        if torch.isnan(y).any():
+            print('y1 nan')
+        y = self.bn2(self.conv2(y))
+        if torch.isnan(y).any():
+            print('y2 nan')
+        y += self.shortcut(x)
+        if torch.isnan(y).any():
+            print('y3 nan')
+        y = F.relu(y, inplace=True)  # apply ReLU after addition
+        if torch.isnan(y).any():
+            print('y4 nan')
 
-        # out = self.avgpool(out)
-        # out = out.reshape(x.shape[0], -1)
-        # out = self.fc(out)
-        return out
-
-
-
+        return y
 def _generate_future_mask(
          size: int, dtype: torch.dtype, device: torch.device
     ) -> torch.Tensor:
@@ -690,13 +609,12 @@ class Views2Points(nn.Module):
     def __init__(self,config):
         super().__init__()
         self.img_feature =ResnetBlock(config.resnet_in,config.resnet_out,2)
-        self.img_feature = ResNet50(Bottleneck,resnet_out = config.resnet_out)
         # self.conv3d = nn.Conv3d(in_channels=96,
         #                 out_channels=96,
         #                 kernel_size=(1, 1, 1),
         #                 stride=(1, 1, 1),
         #                 padding=0)
-        self.unet = ResidualUNet3D(config.resnet_out*3,config.UNet_out,num_levels = 3)
+        self.unet = UNet(config.resnet_out*3,config.UNet_out)
         self.config = config
         self.trans_dim = config.trans_dim #384
         self.MAE_encoder = MaskTransformer(config)
@@ -726,10 +644,6 @@ class Views2Points(nn.Module):
         # print('front.shape: ',front.shape)
         # print('top.shape: ',top.shape)
         # print('cad_data.shape: ',cad_data.shape)
-        print('command.shape: ',command.shape)
-        print('args.shape: ',args.shape)
-        '''command.shape:  torch.Size([1, 64])
-            args.shape:  torch.Size([1, 64, 16])'''
         if torch.isnan(side).any():
             print('side nan')
         if torch.isnan(front).any():
@@ -760,9 +674,6 @@ class Views2Points(nn.Module):
         feature_3d = torch.cat((side_3d,front_3d,top_3d),dim=1)
         ##print('feature_3d1.shape: ',feature_3d.shape)
         feature_3d = self.unet(feature_3d)
-        feature_3d = feature_3d.float()
-        #print('feature_3d.shape: ',feature_3d.shape)
-        '''feature_3d.shape:  torch.Size([1, 3, 100, 100, 100])'''
         if torch.isnan(feature_3d).any():
             print('feature_3d_unet nan')
         #print('feature_3d2.shape: ',feature_3d.shape)
@@ -839,19 +750,35 @@ class Views2Points(nn.Module):
 
         
 if __name__=='__main__':
+    transforms = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Resize([200, 200])
+        ])
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     cfg = parser.get_args()
-    side = torch.full((1,3,200,200),255).to(device)  
-    front = torch.full((1,3,200,200),255).to(device)
-    top = torch.full((1,3,200,200),255).to(device)
-    cad_data = torch.rand(1, 1024, 3).to(device)
+    # side = torch.full((1,3,200,200),255).type(torch.cuda.FloatTensor).to(device)  
+    # front = torch.full((1,3,200,200),255).type(torch.cuda.FloatTensor).to(device)
+    # top = torch.full((1,3,200,200),255).type(torch.cuda.FloatTensor).to(device)
+    front = Image.open('/scratch/sg7484/data/CMDGen/data3D_pic/abc_0000_step_v00/00005885/00005885_f.png')
+    side = Image.open('/scratch/sg7484/data/CMDGen/data3D_pic/abc_0000_step_v00/00005885/00005885_r.png')  
+    top = Image.open('/scratch/sg7484/data/CMDGen/data3D_pic/abc_0000_step_v00/00005885/00005885_t.png')
+    
+    front = transforms(front) 
+    side = transforms(side) 
+    top = transforms(top) 
+    front = front.unsqueeze(0).type(torch.cuda.FloatTensor).to(device)  
+    side = side.unsqueeze(0).type(torch.cuda.FloatTensor).to(device)  
+    top = top.unsqueeze(0).type(torch.cuda.FloatTensor).to(device)  
+    print('front.shape: ',front.shape)
+    cad_data = torch.rand(1, 1728, 3).type(torch.cuda.FloatTensor).to(device)
+    command, args = torch.rand(1, 64).type(torch.cuda.FloatTensor).to(device), torch.rand(1, 64, 16).type(torch.cuda.FloatTensor).to(device)
     '''
     side((x),y,z)
     front(x,(y),z)
     top:(x,y,(z))
     '''
-    model = Views2Points(cfg=cfg).to(device)
+    model = Views2Points(cfg).to(device)
     print(model)
-    a= model(side,front,top,cad_data)
+    a= model(side,front,top,cad_data,command, args)
         
         
