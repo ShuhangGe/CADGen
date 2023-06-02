@@ -179,12 +179,12 @@ def main():
     test_data = CADGENdataset(args,test=True)
     train_loader = torch.utils.data.DataLoader(train_data,
                                             batch_size=args.train_batch,
-                                            shuffle=False,
+                                            shuffle=True,
                                             num_workers=args.num_workers)
     #print('2222222222222222222222222222222222222222222222222222222')
     test_loader = torch.utils.data.DataLoader(test_data,
                                                batch_size=args.test_batch,
-                                               shuffle=False,
+                                               shuffle=True,
                                                num_workers=args.num_workers)
     #print('33333333333333333333333333333333333333333333333333')
     model = Views2Points(args)

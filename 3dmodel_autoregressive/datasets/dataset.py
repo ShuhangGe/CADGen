@@ -35,7 +35,7 @@ class CADGENdataset(data.Dataset):
         self.h5_root = cfg.cmd_root
         self.transforms = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Resize([200, 200]),
+            transforms.Resize([256, 256]),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
         self.max_total_len  = MAX_TOTAL_LEN
@@ -79,6 +79,8 @@ class CADGENdataset(data.Dataset):
         paramaters = cad_vec[:, 1:]
         command = torch.tensor(command, dtype=torch.long)
         paramaters = torch.tensor(paramaters, dtype=torch.long)
+        command = command.clamp(0,5)
+        paramaters = paramaters.clamp(-1,255)
         
         num = data_path.split('/')[-1]
         front_pic_path = os.path.join(data_path,num+'_f.png')

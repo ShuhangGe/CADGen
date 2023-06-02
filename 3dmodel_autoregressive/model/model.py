@@ -8,6 +8,8 @@ from .text_encoder import Text_Encoder
 from .model_utils import _make_seq_first, _make_batch_first, \
     _get_padding_mask, _get_key_padding_mask, _get_group_mask
 from .unet3d import ResidualUNet3D
+from .resnet_backbone import ResNet50
+
 
 import torch
 import torch.nn as nn
@@ -436,242 +438,6 @@ class Decoder(nn.Module):
 '''
 
 
-class UNet(nn.Module):
-    def __init__(self, in_channel=96, out_channel=2, training=True):
-        super(UNet, self).__init__()
-        self.in_channel = in_channel
-        self.training = training
-        self.encoder1 =  nn.Sequential(nn.Conv3d(in_channel, 64, 3, stride=1, padding=1),nn.Conv3d(64, 32, 3, stride=1, padding=1))  # b, 16, 10, 10
-        self.encoder2=   nn.Conv3d(32, 64, 3, stride=1, padding=1)  # b, 8, 3, 3
-        self.encoder3=   nn.Conv3d(64, 128, 3, stride=1, padding=1)
-        self.encoder4=   nn.Conv3d(128, 256, 3, stride=1, padding=1)
-        # self.encoder5=   nn.Conv3d(256, 512, 3, stride=1, padding=1)
-        
-        # self.decoder1 = nn.Conv3d(512, 256, 3, stride=1,padding=1)  # b, 16, 5, 5
-        self.decoder2 =   nn.Conv3d(256, 128, 3, stride=1, padding=1)  # b, 8, 15, 1
-        self.decoder3 =   nn.Conv3d(128, 64, 3, stride=1, padding=1)  # b, 1, 28, 28
-        self.decoder4 =   nn.Conv3d(64, 32, 3, stride=1, padding=1)
-        self.decoder5 =   nn.Conv3d(32, 2, 3, stride=1, padding=1)
-        
-        self.map4 = nn.Sequential(
-            nn.Conv3d(2, out_channel, 1, 1),
-            #nn.Upsample(scale_factor=(1, 2, 2), mode='trilinear'),
-            nn.Softmax(dim =1)
-        )
-
-        # self.map3 = nn.Sequential(
-        #     nn.Conv3d(64, out_channel, 1, 1),
-        #     nn.Upsample(scale_factor=(4, 8, 8), mode='trilinear'),
-        #     nn.Softmax(dim =1)
-        # )
-        # self.map2 = nn.Sequential(
-        #     nn.Conv3d(128, out_channel, 1, 1),
-        #     nn.Upsample(scale_factor=(8, 16, 16), mode='trilinear'),
-        #     nn.Softmax(dim =1)
-        # )
-
-        # self.map1 = nn.Sequential(
-        #     nn.Conv3d(256, out_channel, 1, 1),
-        #     nn.Upsample(scale_factor=(16, 32, 32), mode='trilinear'),
-        #     nn.Softmax(dim =1)
-        # )
-        self.padding = torch.nn.ReplicationPad3d((1, 0, 1, 0, 1, 0))
-        self.Tanh = nn.Tanh()
-    def forward(self, x):
-        #print('self.in_channel: ',self.in_channel)
-        #print('x: ', x.shape)
-        out = self.encoder1(x)
-        #print('out1.shape: ',out.shape)
-        out = F.relu(F.max_pool3d(out,2,2))
-        t1 = out
-        #print('t1.shape: ',t1.shape)
-        out = F.relu(F.max_pool3d(self.encoder2(out),2,2))
-        t2 = out
-        #print('t2.shape: ',t2.shape)
-        out = F.relu(F.max_pool3d(self.encoder3(out),2,2))
-        t3 = out
-        #print('t3.shape: ',t3.shape)
-        out = F.relu(F.max_pool3d(self.encoder4(out),2,2))
-        #print('out2.shape: ',out.shape)
-        #output1 = self.map1(out)
-        out = F.relu(F.interpolate(self.decoder2(out),scale_factor=(2,2,2),mode ='trilinear'))
-        #print('out3.shape: ',out.shape)
-        out = torch.add(out,t3)
-        #output2 = self.map2(out)
-
-        out = F.relu(F.interpolate(self.decoder3(out),scale_factor=(2,2,2),mode ='trilinear'))
-        #print('out4.shape: ',out.shape)
-        if out.shape[-1] !=t2.shape[-1]:
-            out = self.padding(out)
-            #print('out5.shape: ',out.shape)
-        out = torch.add(out,t2)
-        #output3 = self.map3(out)
-        out = F.relu(F.interpolate(self.decoder4(out),scale_factor=(2,2,2),mode ='trilinear'))
-        #print('out6.shape: ',out.shape)
-        out = torch.add(out,t1)
-
-        out = F.relu(F.interpolate(self.decoder5(out),scale_factor=(2,2,2),mode ='trilinear'))
-        #print('out7.shape: ',out.shape)
-
-        output4 = self.map4(out)
-        #print('output4.shape: ',output4.shape)
-
-        return output4
-
-# class ResnetBlock(nn.Module):
-#     def __init__(self, in_channels, out_channels, stride):
-#         super(ResnetBlock, self).__init__()
-#         self.conv0 = nn.Conv2d(3, in_channels, kernel_size=1, bias=False)
-#         self.bn0 = nn.BatchNorm2d(in_channels)
-#         self.conv1 = nn.Conv2d(
-#             in_channels,
-#             out_channels,
-#             kernel_size=3,
-#             stride=stride,  # downsample with first conv
-#             padding=1,
-#             bias=False)
-#         self.bn1 = nn.BatchNorm2d(out_channels)
-#         self.conv2 = nn.Conv2d(
-#             out_channels,
-#             out_channels,
-#             kernel_size=3,
-#             stride=1,
-#             padding=1,
-#             bias=False)
-#         self.bn2 = nn.BatchNorm2d(out_channels)
-
-#         self.shortcut = nn.Sequential()
-#         if in_channels != out_channels:
-#             self.shortcut.add_module(
-#                 'conv',
-#                 nn.Conv2d(
-#                     in_channels,
-#                     out_channels,
-#                     kernel_size=1,
-#                     stride=stride,  # downsample
-#                     padding=0,
-#                     bias=False))
-#             self.shortcut.add_module('bn', nn.BatchNorm2d(out_channels))  # BN
-
-#     def forward(self, x):
-#         if torch.isnan(x).any():
-#             print('x nan')
-#         print('x.shape: ',x.shape)
-#         x = self.conv0(x)
-#         #print(x)
-#         if torch.isnan(x).any():
-#             print('x1 nan')
-#         x = self.bn0(x)
-#         if torch.isnan(x).any():
-#             print('x2 nan')
-#         x = F.relu(x)
-#         if torch.isnan(x).any():
-#             print('x3 nan')
-#         y = F.relu(self.bn1(self.conv1(x)), inplace=True)
-#         if torch.isnan(y).any():
-#             print('y1 nan')
-#         y = self.bn2(self.conv2(y))
-#         if torch.isnan(y).any():
-#             print('y2 nan')
-#         y += self.shortcut(x)
-#         if torch.isnan(y).any():
-#             print('y3 nan')
-#         y = F.relu(y, inplace=True)  # apply ReLU after addition
-#         if torch.isnan(y).any():
-#             print('y4 nan')
-
-#         return y
-
-class Bottleneck(nn.Module):
-    def __init__(self,in_channels,out_channels,stride=[1,1,1],padding=[0,1,0],first=False) -> None:
-        super(Bottleneck,self).__init__()
-        self.bottleneck = nn.Sequential(
-            nn.Conv2d(in_channels,out_channels,kernel_size=1,stride=stride[0],padding=padding[0],bias=False),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True), # 原地替换 节省内存开销
-            nn.Conv2d(out_channels,out_channels,kernel_size=3,stride=stride[1],padding=padding[1],bias=False),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True), # 原地替换 节省内存开销
-            nn.Conv2d(out_channels,out_channels*4,kernel_size=1,stride=stride[2],padding=padding[2],bias=False),
-            nn.BatchNorm2d(out_channels*4)
-        )
-
-        # shortcut 部分
-        # 由于存在维度不一致的情况 所以分情况
-        self.shortcut = nn.Sequential()
-        if first:
-            self.shortcut = nn.Sequential(
-                # 卷积核为1 进行升降维
-                # 注意跳变时 都是stride==2的时候 也就是每次输出信道升维的时候
-                nn.Conv2d(in_channels, out_channels*4, kernel_size=1, stride=stride[1], bias=False),
-                nn.BatchNorm2d(out_channels*4)
-            )
-        # if stride[1] != 1 or in_channels != out_channels:
-        #     self.shortcut = nn.Sequential(
-        #         # 卷积核为1 进行升降维
-        #         # 注意跳变时 都是stride==2的时候 也就是每次输出信道升维的时候
-        #         nn.Conv2d(in_channels, out_channels*4, kernel_size=1, stride=stride[1], bias=False),
-        #         nn.BatchNorm2d(out_channels)
-        #     )
-    def forward(self, x):
-        out = self.bottleneck(x)
-        out += self.shortcut(x)
-        out = F.relu(out)
-        return out
-
-# 采用bn的网络中，卷积层的输出并不加偏置
-class ResNet50(nn.Module):
-    def __init__(self,Bottleneck, resnet_out, num_classes=10) -> None:
-        super(ResNet50, self).__init__()
-        self.in_channels = 64
-        # 第一层作为单独的 因为没有残差快
-        self.conv1 = nn.Sequential(
-            nn.Conv2d(3,64,kernel_size=7,stride=2,padding=3,bias=False),
-            nn.BatchNorm2d(64),
-            nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        )
-
-        # conv2
-        self.conv2 = self._make_layer(Bottleneck,64,[[1,1,1]]*3,[[0,1,0]]*3)
-
-        # conv3
-        self.conv3 = self._make_layer(Bottleneck,128,[[1,2,1]] + [[1,1,1]]*3,[[0,1,0]]*4)
-
-        # conv4
-        self.conv4 = self._make_layer(Bottleneck,256,[[1,2,1]] + [[1,1,1]]*5,[[0,1,0]]*6)
-
-        # conv5
-        self.conv5 = self._make_layer(Bottleneck,resnet_out,[[1,2,1]] + [[1,1,1]]*2,[[0,1,0]]*3)
-
-        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.fc = nn.Linear(2048, num_classes)
-
-    def _make_layer(self,block,out_channels,strides,paddings):
-        layers = []
-        # 用来判断是否为每个block层的第一层
-        flag = True
-        for i in range(0,len(strides)):
-            layers.append(block(self.in_channels,out_channels,strides[i],paddings[i],first=flag))
-            flag = False
-            self.in_channels = out_channels * 4
-            
-
-        return nn.Sequential(*layers)
-
-    def forward(self, x):
-        out = self.conv1(x)
-        out = self.conv2(out)
-        out = self.conv3(out)
-        out = self.conv4(out)
-        out = self.conv5(out)
-
-        # out = self.avgpool(out)
-        # out = out.reshape(x.shape[0], -1)
-        # out = self.fc(out)
-        return out
-
-
-
 def _generate_future_mask(
          size: int, dtype: torch.dtype, device: torch.device
     ) -> torch.Tensor:
@@ -689,8 +455,8 @@ class Views2Points(nn.Module):
     '''
     def __init__(self,config):
         super().__init__()
-        self.img_feature =ResnetBlock(config.resnet_in,config.resnet_out,2)
-        self.img_feature = ResNet50(Bottleneck,resnet_out = config.resnet_out)
+        #self.img_feature =ResnetBlock(config.resnet_in,config.resnet_out,2)
+        self.img_feature = ResNet50(resnet_out = int(config.resnet_out/4))
         # self.conv3d = nn.Conv3d(in_channels=96,
         #                 out_channels=96,
         #                 kernel_size=(1, 1, 1),
@@ -736,6 +502,7 @@ class Views2Points(nn.Module):
             print('front nan')
         if torch.isnan(top).any():
             print('top nan')
+        print('side.shape: ',side.shape)
         side_feature = self.img_feature(side)
         if torch.isnan(side_feature).any():
             print('img_feature1 nan')

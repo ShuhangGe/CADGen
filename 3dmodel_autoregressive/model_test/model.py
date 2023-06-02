@@ -17,7 +17,9 @@ from model_utils import _make_seq_first, _make_batch_first, \
     _get_padding_mask, _get_key_padding_mask, _get_group_mask
 from bert import BertConfig
 from bert.modeling_bert import BertEncoder
-        
+from unet3d import ResidualUNet3D
+from resnet_backbone import ResNet50
+
 sys.path.append("/scratch/sg7484/CMDGen/3dmodel_autoregressive") 
 import torch
 import torch.nn as nn
@@ -32,10 +34,8 @@ from utils.logger import *
 import random
 from knn_cuda import KNN
 
-
 import logging
 import copy
-
 from torch.nn import functional as F
 from torch.nn.modules.module import Module
 from torch.nn.modules.container import ModuleList
@@ -48,7 +48,85 @@ from PIL import Image
 import torchvision.transforms as transforms
 
 #from bert.modeling_bert improt BertEncoder
+import h5py
+# import open3d
+import os
+ALL_COMMANDS = ['Line', 'Arc', 'Circle', 'EOS', 'SOL', 'Ext']
+LINE_IDX = ALL_COMMANDS.index('Line')
+ARC_IDX = ALL_COMMANDS.index('Arc')
+CIRCLE_IDX = ALL_COMMANDS.index('Circle')
+EOS_IDX = ALL_COMMANDS.index('EOS')
+SOL_IDX = ALL_COMMANDS.index('SOL')
+EXT_IDX = ALL_COMMANDS.index('Ext')
 
+EXTRUDE_OPERATIONS = ["NewBodyFeatureOperation", "JoinFeatureOperation",
+                      "CutFeatureOperation", "IntersectFeatureOperation"]
+EXTENT_TYPE = ["OneSideFeatureExtentType", "SymmetricFeatureExtentType",
+               "TwoSidesFeatureExtentType"]
+
+PAD_VAL = -1
+N_ARGS_SKETCH = 5 # sketch parameters: x, y, alpha, f, r
+N_ARGS_PLANE = 3 # sketch plane orientation: theta, phi, gamma
+N_ARGS_TRANS = 4 # sketch plane origin + sketch bbox size: p_x, p_y, p_z, s
+N_ARGS_EXT_PARAM = 4 # extrusion parameters: e1, e2, b, u
+N_ARGS_EXT = N_ARGS_PLANE + N_ARGS_TRANS + N_ARGS_EXT_PARAM
+N_ARGS = N_ARGS_SKETCH + N_ARGS_EXT
+
+SOL_VEC = np.array([SOL_IDX, *([PAD_VAL] * N_ARGS)])
+EOS_VEC = np.array([EOS_IDX, *([PAD_VAL] * N_ARGS)])
+
+CMD_ARGS_MASK = np.array([[1, 1, 0, 0, 0, *[0]*N_ARGS_EXT],  # line
+                          [1, 1, 1, 1, 0, *[0]*N_ARGS_EXT],  # arc
+                          [1, 1, 0, 0, 1, *[0]*N_ARGS_EXT],  # circle
+                          [0, 0, 0, 0, 0, *[0]*N_ARGS_EXT],  # EOS
+                          [0, 0, 0, 0, 0, *[0]*N_ARGS_EXT],  # SOL
+                          [*[0]*N_ARGS_SKETCH, *[1]*N_ARGS_EXT]]) # Extrude
+
+NORM_FACTOR = 0.75 # scale factor for normalization to prevent overflow during augmentation
+
+MAX_N_EXT = 10 # maximum number of extrusion
+MAX_N_LOOPS = 6 # maximum number of loops per sketch
+MAX_N_CURVES = 15 # maximum number of curves per loop
+MAX_TOTAL_LEN = 64 # maximum cad sequence length
+ARGS_DIM = 256
+class IO:
+    @classmethod
+    def get(cls, file_path):
+        _, file_extension = os.path.splitext(file_path)
+
+        if file_extension in ['.npy']:
+            return cls._read_npy(file_path)
+        # elif file_extension in ['.pcd']:
+        #     return cls._read_pcd(file_path)
+        elif file_extension in ['.h5']:
+            return cls._read_h5(file_path)
+        elif file_extension in ['.txt']:
+            return cls._read_txt(file_path)
+        else:
+            raise Exception('Unsupported file extension: %s' % file_extension)
+
+    # References: https://github.com/numpy/numpy/blob/master/numpy/lib/format.py
+    @classmethod
+    def _read_npy(cls, file_path):
+        return np.load(file_path)
+       
+    # References: https://github.com/dimatura/pypcd/blob/master/pypcd/pypcd.py#L275
+    # Support PCD files without compression ONLY!
+    # @classmethod
+    # def _read_pcd(cls, file_path):
+    #     pc = open3d.io.read_point_cloud(file_path)
+    #     ptcloud = np.array(pc.points)
+    #     return ptcloud
+
+    @classmethod
+    def _read_txt(cls, file_path):
+        return np.loadtxt(file_path)
+
+    @classmethod
+    def _read_h5(cls, file_path):
+        f = h5py.File(file_path, 'r')
+        return f['data'][()]
+    
 class Encoder(nn.Module):   ## Embedding module
     def __init__(self, encoder_channel):
         super().__init__()
@@ -446,151 +524,6 @@ class Decoder(nn.Module):
 '''
 
 
-class UNet(nn.Module):
-    def __init__(self, in_channel=96, out_channel=2, training=True):
-        super(UNet, self).__init__()
-        self.in_channel = in_channel
-        self.training = training
-        self.encoder1 =  nn.Sequential(nn.Conv3d(in_channel, 64, 3, stride=1, padding=1),nn.Conv3d(64, 32, 3, stride=1, padding=1))  # b, 16, 10, 10
-        self.encoder2=   nn.Conv3d(32, 64, 3, stride=1, padding=1)  # b, 8, 3, 3
-        self.encoder3=   nn.Conv3d(64, 128, 3, stride=1, padding=1)
-        self.encoder4=   nn.Conv3d(128, 256, 3, stride=1, padding=1)
-        # self.encoder5=   nn.Conv3d(256, 512, 3, stride=1, padding=1)
-        
-        # self.decoder1 = nn.Conv3d(512, 256, 3, stride=1,padding=1)  # b, 16, 5, 5
-        self.decoder2 =   nn.Conv3d(256, 128, 3, stride=1, padding=1)  # b, 8, 15, 1
-        self.decoder3 =   nn.Conv3d(128, 64, 3, stride=1, padding=1)  # b, 1, 28, 28
-        self.decoder4 =   nn.Conv3d(64, 32, 3, stride=1, padding=1)
-        self.decoder5 =   nn.Conv3d(32, 2, 3, stride=1, padding=1)
-        
-        self.map4 = nn.Sequential(
-            nn.Conv3d(2, out_channel, 1, 1),
-            #nn.Upsample(scale_factor=(1, 2, 2), mode='trilinear'),
-            nn.Softmax(dim =1)
-        )
-
-        # self.map3 = nn.Sequential(
-        #     nn.Conv3d(64, out_channel, 1, 1),
-        #     nn.Upsample(scale_factor=(4, 8, 8), mode='trilinear'),
-        #     nn.Softmax(dim =1)
-        # )
-        # self.map2 = nn.Sequential(
-        #     nn.Conv3d(128, out_channel, 1, 1),
-        #     nn.Upsample(scale_factor=(8, 16, 16), mode='trilinear'),
-        #     nn.Softmax(dim =1)
-        # )
-
-        # self.map1 = nn.Sequential(
-        #     nn.Conv3d(256, out_channel, 1, 1),
-        #     nn.Upsample(scale_factor=(16, 32, 32), mode='trilinear'),
-        #     nn.Softmax(dim =1)
-        # )
-        self.padding = torch.nn.ReplicationPad3d((1, 0, 1, 0, 1, 0))
-        self.Tanh = nn.Tanh()
-    def forward(self, x):
-        #print('self.in_channel: ',self.in_channel)
-        #print('x: ', x.shape)
-        out = self.encoder1(x)
-        #print('out1.shape: ',out.shape)
-        out = F.relu(F.max_pool3d(out,2,2))
-        t1 = out
-        #print('t1.shape: ',t1.shape)
-        out = F.relu(F.max_pool3d(self.encoder2(out),2,2))
-        t2 = out
-        #print('t2.shape: ',t2.shape)
-        out = F.relu(F.max_pool3d(self.encoder3(out),2,2))
-        t3 = out
-        #print('t3.shape: ',t3.shape)
-        out = F.relu(F.max_pool3d(self.encoder4(out),2,2))
-        #print('out2.shape: ',out.shape)
-        #output1 = self.map1(out)
-        out = F.relu(F.interpolate(self.decoder2(out),scale_factor=(2,2,2),mode ='trilinear'))
-        #print('out3.shape: ',out.shape)
-        out = torch.add(out,t3)
-        #output2 = self.map2(out)
-
-        out = F.relu(F.interpolate(self.decoder3(out),scale_factor=(2,2,2),mode ='trilinear'))
-        #print('out4.shape: ',out.shape)
-        if out.shape[-1] !=t2.shape[-1]:
-            out = self.padding(out)
-            #print('out5.shape: ',out.shape)
-        out = torch.add(out,t2)
-        #output3 = self.map3(out)
-        out = F.relu(F.interpolate(self.decoder4(out),scale_factor=(2,2,2),mode ='trilinear'))
-        #print('out6.shape: ',out.shape)
-        out = torch.add(out,t1)
-
-        out = F.relu(F.interpolate(self.decoder5(out),scale_factor=(2,2,2),mode ='trilinear'))
-        #print('out7.shape: ',out.shape)
-
-        output4 = self.map4(out)
-        #print('output4.shape: ',output4.shape)
-
-        return output4
-
-class ResnetBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, stride):
-        super(ResnetBlock, self).__init__()
-        self.conv0 = nn.Conv2d(3, in_channels, kernel_size=1, bias=False)
-        self.bn0 = nn.BatchNorm2d(in_channels)
-        self.conv1 = nn.Conv2d(
-            in_channels,
-            out_channels,
-            kernel_size=3,
-            stride=stride,  # downsample with first conv
-            padding=1,
-            bias=False)
-        self.bn1 = nn.BatchNorm2d(out_channels)
-        self.conv2 = nn.Conv2d(
-            out_channels,
-            out_channels,
-            kernel_size=3,
-            stride=1,
-            padding=1,
-            bias=False)
-        self.bn2 = nn.BatchNorm2d(out_channels)
-
-        self.shortcut = nn.Sequential()
-        if in_channels != out_channels:
-            self.shortcut.add_module(
-                'conv',
-                nn.Conv2d(
-                    in_channels,
-                    out_channels,
-                    kernel_size=1,
-                    stride=stride,  # downsample
-                    padding=0,
-                    bias=False))
-            self.shortcut.add_module('bn', nn.BatchNorm2d(out_channels))  # BN
-
-    def forward(self, x):
-        if torch.isnan(x).any():
-            print('x nan')
-        print('x.shape: ',x.shape)
-        x = self.conv0(x)
-        #print(x)
-        if torch.isnan(x).any():
-            print('x1 nan')
-        x = self.bn0(x)
-        if torch.isnan(x).any():
-            print('x2 nan')
-        x = F.relu(x)
-        if torch.isnan(x).any():
-            print('x3 nan')
-        y = F.relu(self.bn1(self.conv1(x)), inplace=True)
-        if torch.isnan(y).any():
-            print('y1 nan')
-        y = self.bn2(self.conv2(y))
-        if torch.isnan(y).any():
-            print('y2 nan')
-        y += self.shortcut(x)
-        if torch.isnan(y).any():
-            print('y3 nan')
-        y = F.relu(y, inplace=True)  # apply ReLU after addition
-        if torch.isnan(y).any():
-            print('y4 nan')
-
-        return y
 def _generate_future_mask(
          size: int, dtype: torch.dtype, device: torch.device
     ) -> torch.Tensor:
@@ -608,13 +541,14 @@ class Views2Points(nn.Module):
     '''
     def __init__(self,config):
         super().__init__()
-        self.img_feature =ResnetBlock(config.resnet_in,config.resnet_out,2)
+        #self.img_feature =ResnetBlock(config.resnet_in,config.resnet_out,2)
+        self.img_feature = ResNet50(resnet_out = int(config.resnet_out/4))
         # self.conv3d = nn.Conv3d(in_channels=96,
         #                 out_channels=96,
         #                 kernel_size=(1, 1, 1),
         #                 stride=(1, 1, 1),
         #                 padding=0)
-        self.unet = UNet(config.resnet_out*3,config.UNet_out)
+        self.unet = ResidualUNet3D(config.resnet_out*3,config.UNet_out,num_levels = 3)
         self.config = config
         self.trans_dim = config.trans_dim #384
         self.MAE_encoder = MaskTransformer(config)
@@ -644,12 +578,17 @@ class Views2Points(nn.Module):
         # print('front.shape: ',front.shape)
         # print('top.shape: ',top.shape)
         # print('cad_data.shape: ',cad_data.shape)
+        print('command.shape: ',command.shape)
+        print('args.shape: ',args.shape)
+        '''command.shape:  torch.Size([1, 64])
+            args.shape:  torch.Size([1, 64, 16])'''
         if torch.isnan(side).any():
             print('side nan')
         if torch.isnan(front).any():
             print('front nan')
         if torch.isnan(top).any():
             print('top nan')
+        print('side.shape: ',side.shape)
         side_feature = self.img_feature(side)
         if torch.isnan(side_feature).any():
             print('img_feature1 nan')
@@ -674,6 +613,9 @@ class Views2Points(nn.Module):
         feature_3d = torch.cat((side_3d,front_3d,top_3d),dim=1)
         ##print('feature_3d1.shape: ',feature_3d.shape)
         feature_3d = self.unet(feature_3d)
+        feature_3d = feature_3d.float()
+        #print('feature_3d.shape: ',feature_3d.shape)
+        '''feature_3d.shape:  torch.Size([1, 3, 100, 100, 100])'''
         if torch.isnan(feature_3d).any():
             print('feature_3d_unet nan')
         #print('feature_3d2.shape: ',feature_3d.shape)
@@ -748,11 +690,26 @@ class Views2Points(nn.Module):
         '''out_logits[1].shape:  torch.Size([50, 60, 16, 257])'''
         return res
 
+def pc_norm(pc):
+    """ pc: NxC, return NxC """
+    centroid = np.mean(pc, axis=0)
+    pc = pc - centroid
+    m = np.max(np.sqrt(np.sum(pc**2, axis=1)))
+    pc = pc / m
+    return pc
+def random_sample(pc, num):
+    n_points=10000
+    permutation = np.arange(n_points)
+    np.random.shuffle(permutation)
+    pc = pc[permutation[:num]]
+    return pc
         
 if __name__=='__main__':
+    max_total_len = 64
+    sample_points_num = 1728
     transforms = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Resize([200, 200])
+            transforms.Resize([256, 256])
         ])
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     cfg = parser.get_args()
@@ -770,8 +727,42 @@ if __name__=='__main__':
     side = side.unsqueeze(0).type(torch.cuda.FloatTensor).to(device)  
     top = top.unsqueeze(0).type(torch.cuda.FloatTensor).to(device)  
     print('front.shape: ',front.shape)
-    cad_data = torch.rand(1, 1728, 3).type(torch.cuda.FloatTensor).to(device)
-    command, args = torch.rand(1, 64).type(torch.cuda.FloatTensor).to(device), torch.rand(1, 64, 16).type(torch.cuda.FloatTensor).to(device)
+    # cad_data = torch.rand(1, 1728, 3).type(torch.cuda.FloatTensor).to(device)
+    # command, args = torch.rand(1, 64).type(torch.cuda.FloatTensor).to(device), torch.rand(1, 64, 16).type(torch.cuda.FloatTensor).to(device)
+    
+    cad_dir = '/scratch/sg7484/data/CMDGen/Sketch_1_Extrude_1/cad/00005885.npy'
+    cmd_dir = '/scratch/sg7484/data/CMDGen/Sketch_1_Extrude_1/cmd/00005885.h5'
+    cad_path = os.path.join(cad_dir)
+    #print('cad_path: ',cad_path)
+    cad_data = IO.get(cad_path).astype(np.float32)
+    #print('debug-------------------------------------')
+    cad_data = random_sample(cad_data, sample_points_num)
+    #print('debug-------------------------------------')
+    cad_data = pc_norm(cad_data)
+    cad_data = torch.from_numpy(cad_data).float()
+    cad_data = cad_data.to(device)
+    cad_data = cad_data.unsqueeze(0)
+    
+    
+    h5_path = os.path.join(cmd_dir) 
+    with h5py.File(h5_path, "r") as fp:
+        cad_vec = fp["vec"][:] # (len, 1 + N_ARGS)
+    #print('cad_vec: ',cad_vec)
+    pad_len = max_total_len - cad_vec.shape[0]
+    cad_vec = np.concatenate([cad_vec, EOS_VEC[np.newaxis].repeat(pad_len, axis=0)], axis=0)
+    np.set_printoptions(threshold=np.inf)
+    #print('cad_vec: \n',np.array(cad_vec))
+    #print('cad_vec.shape: ',cad_vec.shape)
+    command = cad_vec[:, 0]
+    paramaters = cad_vec[:, 1:]
+    command = torch.tensor(command, dtype=torch.long)
+    paramaters = torch.tensor(paramaters, dtype=torch.long)
+    command = command.clamp(0,5).to(device)
+    paramaters = paramaters.clamp(-1,255).to(device)#.clamp(-1,256)
+    command = command.unsqueeze(0)
+    paramaters = paramaters.unsqueeze(0)
+    print('command: ',command)
+    print('paramaters: ',paramaters)
     '''
     side((x),y,z)
     front(x,(y),z)
@@ -779,6 +770,6 @@ if __name__=='__main__':
     '''
     model = Views2Points(cfg).to(device)
     print(model)
-    a= model(side,front,top,cad_data,command, args)
+    a= model(side,front,top,cad_data,command, paramaters)
         
         
