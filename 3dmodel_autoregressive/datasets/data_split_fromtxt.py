@@ -1,7 +1,7 @@
 import os
 import numpy as np
-txt_path = '/scratch/sg7484/CMDGen/3dmodel/datasets/all_data.txt'
-save_path ='/scratch/sg7484/CMDGen/3dmodel/datasets'
+txt_path = '/home/rl4citygen/gsh/data/CMDGen/all_data.txt'
+save_path ='/home/rl4citygen/gsh/data/CMDGen'
 with open(txt_path,'r') as f:
     lines = f.readlines()
 length  = len(lines)

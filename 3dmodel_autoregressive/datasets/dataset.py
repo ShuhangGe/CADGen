@@ -20,6 +20,10 @@ class CADGENdataset(data.Dataset):
     def __init__(self,cfg,test):
         self.test = test
         self.data_root= cfg.data_root
+        self.cad_root = cfg.cad_root
+        self.h5_root = cfg.cmd_root
+        self.pic_root = cfg.pic_root
+        
         self.train_lis = os.path.join(self.data_root,'train.txt')
         self.test_lis = os.path.join(self.data_root,'test.txt')
         if self.test:
@@ -31,8 +35,7 @@ class CADGENdataset(data.Dataset):
         self.file_list = []
         for line in lines:
             self.file_list.append(line.strip())
-        self.cad_root = cfg.cad_root
-        self.h5_root = cfg.cmd_root
+
         self.transforms = transforms.Compose([
             transforms.ToTensor(),
             transforms.Resize([256, 256]),
@@ -55,8 +58,7 @@ class CADGENdataset(data.Dataset):
         return pc
     
     def __getitem__(self, index):
-        data_path = self.file_list[index]
-        data_num = data_path.split('/')[-1]
+        data_num = self.file_list[index]
         cad_path = os.path.join(self.cad_root, data_num+'.npy')
         #print('cad_path: ',cad_path)
         cad_data = IO.get(cad_path).astype(np.float32)
@@ -82,10 +84,9 @@ class CADGENdataset(data.Dataset):
         command = command.clamp(0,5)
         paramaters = paramaters.clamp(-1,255)
         
-        num = data_path.split('/')[-1]
-        front_pic_path = os.path.join(data_path,num+'_f.png')
-        top_pic_path = os.path.join(data_path,num+'_t.png')
-        side_pic_path = os.path.join(data_path,num+'_r.png')
+        front_pic_path = os.path.join(self.pic_root,data_num+'_f.png')
+        top_pic_path = os.path.join(self.pic_root,data_num+'_t.png')
+        side_pic_path = os.path.join(self.pic_root,data_num+'_r.png')
         front_pic = cv2.imread(front_pic_path)
         top_pic = cv2.imread(top_pic_path)
         side_pic = cv2.imread(side_pic_path)

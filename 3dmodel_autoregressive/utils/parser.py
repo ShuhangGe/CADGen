@@ -1,8 +1,12 @@
 import os
 import argparse
 from pathlib import Path
-from .config import *
+#from .config import *
 from cadlib.macro import *
+DATA_ROOT = '/home/rl4citygen/gsh/data/CMDGen/Sketch_1_Extrude_1_test'
+CAD_ROOT = '/home/rl4citygen/gsh/data/CMDGen/Sketch_1_Extrude_1_test/cad'
+CMD_ROOT = '/home/rl4citygen/gsh/data/CMDGen/Sketch_1_Extrude_1_test/cmd'
+PIC_ROOT = '/home/rl4citygen/gsh/data/CMDGen/Sketch_1_Extrude_1_test/pic'
 def get_args():
     parser = argparse.ArgumentParser()
     parser = argparse.ArgumentParser(description='CADGen')
@@ -10,6 +14,7 @@ def get_args():
     parser.add_argument('--data_root', type=str, default=DATA_ROOT)
     parser.add_argument('--cad_root', type=str, default=CAD_ROOT)
     parser.add_argument('--cmd_root', type=str, default=CMD_ROOT)
+    parser.add_argument('--pic_root', type=str, default=PIC_ROOT)
     
     #model
     parser.add_argument('--resnet_in', type=int, default=16)
@@ -21,8 +26,8 @@ def get_args():
     parser.add_argument('--device', type=str, default='GPU')
     parser.add_argument('--epochs', type=int, default=300)
     parser.add_argument('--initial_epochs', type=int, default=10)
-    parser.add_argument('--train_batch', type=int, default=12)
-    parser.add_argument('--test_batch', type=int, default=8)
+    parser.add_argument('--train_batch', type=int, default=1)
+    parser.add_argument('--test_batch', type=int, default=1)
     parser.add_argument('--data_path', type=str, default='../data')
     parser.add_argument('--save_path', type=str, default='../results/exp1')
     parser.add_argument('--log_path', type=str)
