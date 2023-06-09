@@ -326,7 +326,7 @@ class BertEncoder(nn.Module):
                 all_attentions = all_attentions + (layer_outputs[1],)
         if self.pre_norm:
             hidden_states = self.LayerNorm(hidden_states)
-        print('hidden_states.shape: ',hidden_states.shape)
+        #print('hidden_states.shape: ',hidden_states.shape)
         outputs = (hidden_states,)
         if self.output_hidden_states:
             outputs = outputs + (all_hidden_states,)

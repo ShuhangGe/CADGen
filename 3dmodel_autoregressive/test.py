@@ -16,7 +16,6 @@ import os, sys
 # optimizer
 import torch.optim as optim
 import numpy as np
-from apex import amp
 from torch.cuda.amp import autocast as autocast
 import h5py
 
@@ -40,7 +39,7 @@ cfg = parser.get_args()
 model = Views2Points(cfg)
 cfg.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # load from checkpoint if provided
-model_path = '/scratch/sg7484/CMDGen/results/exp_3d2cmd1/model/CADGEN_best'
+model_path = '/scratch/sg7484/CMDGen/results/train_1e-6_fulldata_autoregressive_amdacd2_1/model/CADGEN_3'
 model_par = torch.load(model_path)
 model.load_state_dict(model_par)
 model = model.to(cfg.device)
@@ -62,13 +61,20 @@ if not os.path.exists(cfg.test_outputs):
 # evaluate
 
 for i, data in enumerate(test_loader):
-    front_pic,top_pic,side_pic,cad_data,command,paramaters = data['data']
+    front_pic,top_pic,side_pic,cad_data,command,paramaters,data_num = data
+    print('data_id: ', data_num)
+
     front_pic = front_pic.to(cfg.device)
     top_pic = top_pic.to(cfg.device)
     side_pic = side_pic.to(cfg.device)
     cad_data = cad_data.to(cfg.device)
     command = command.to(cfg.device)
     paramaters = paramaters.to(cfg.device)
+    train_command = command[:,:-1]
+    train_paramaters = paramaters[:,:-1,:]
+    tgt_commands = command[:,1:]
+    tgt_paramaters = paramaters[:,1:,:]
+    
     batch_size = command.shape[0]
     #print('commands.shape:',commands.shape)
     gt_vec = torch.cat([command.unsqueeze(-1), paramaters], dim=-1).squeeze(1).detach().cpu().numpy()
@@ -76,21 +82,22 @@ for i, data in enumerate(test_loader):
     commands_ = gt_vec[:, :, 0]
     with torch.no_grad():
         with autocast():
-            outputs = model(front_pic,top_pic,side_pic,cad_data)
+            outputs = model(front_pic,top_pic,side_pic,cad_data,train_command,train_paramaters)
             #print('output: ',output)
             #print('6666666666666666666666666666666666666666')
-            outputs["tgt_commands"] = command
-            outputs["tgt_args"] = paramaters
+            outputs["tgt_commands"] = tgt_commands
+            outputs["tgt_args"] = tgt_paramaters
             batch_out_vec = logits2vec(outputs)
+            print('out put command: ',batch_out_vec[:,:,0])
+            print('target command: ',tgt_commands )
+    # for j in range(batch_size):
+    #     out_vec = batch_out_vec[j]
+    #     seq_len = commands_[j].tolist().index(EOS_IDX)
+    #     print('data["id"]: ',data["id"])
+    #     data_id = data["id"][j].split('/')[-1]
 
-    for j in range(batch_size):
-        out_vec = batch_out_vec[j]
-        seq_len = commands_[j].tolist().index(EOS_IDX)
-        print('data["id"]: ',data["id"])
-        data_id = data["id"][j].split('/')[-1]
-
-        save_path = os.path.join(cfg.test_outputs, '{}_vec.h5'.format(data_id))
-        print('save_path: ',save_path)
-        with h5py.File(save_path, 'w') as fp:
-            fp.create_dataset('out_vec', data=out_vec[:seq_len], dtype=np.int)
-            fp.create_dataset('gt_vec', data=gt_vec[j][:seq_len], dtype=np.int)
+    #     save_path = os.path.join(cfg.test_outputs, '{}_vec.h5'.format(data_id))
+    #     print('save_path: ',save_path)
+    #     with h5py.File(save_path, 'w') as fp:
+    #         fp.create_dataset('out_vec', data=out_vec[:seq_len], dtype=np.int)
+    #         fp.create_dataset('gt_vec', data=gt_vec[j][:seq_len], dtype=np.int)

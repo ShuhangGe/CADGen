@@ -72,13 +72,12 @@ class CADGENdataset(data.Dataset):
         with h5py.File(h5_path, "r") as fp:
             cad_vec = fp["vec"][:] # (len, 1 + N_ARGS)
         #print('cad_vec: ',cad_vec)
+        #print('cad_vec.shape: ',cad_vec.shape)
         pad_len = self.max_total_len - cad_vec.shape[0]
         cad_vec = np.concatenate([cad_vec, EOS_VEC[np.newaxis].repeat(pad_len, axis=0)], axis=0)
-        np.set_printoptions(threshold=np.inf)
-        #print('cad_vec: \n',np.array(cad_vec))
-        #print('cad_vec.shape: ',cad_vec.shape)
         command = cad_vec[:, 0]
         paramaters = cad_vec[:, 1:]
+        
         command = torch.tensor(command, dtype=torch.long)
         paramaters = torch.tensor(paramaters, dtype=torch.long)
         command = command.clamp(0,5)
@@ -97,10 +96,12 @@ class CADGENdataset(data.Dataset):
         # print('top_pic.shape: ',top_pic.shape)
         # print('side_pic.shape: ',side_pic.shape)
         # print('cad_data.shape: ',cad_data.shape)
-        # print('command.shape: ',command.shape)
-        # print('paramaters.shape: ',paramaters.shape)
+        #print('command.shape: ',command.shape)
+        #print('paramaters.shape: ',paramaters.shape)
         # print('data_num: ',data_num)
+        #print(command,paramaters)
         data = {'data':(front_pic,top_pic,side_pic,cad_data,command,paramaters),'id':data_num}
+        data = (front_pic,top_pic,side_pic,cad_data,command,paramaters, data_num)
         #print('data_num: ',data_num)
         return data
     

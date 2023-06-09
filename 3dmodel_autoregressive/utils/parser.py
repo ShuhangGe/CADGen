@@ -3,10 +3,10 @@ import argparse
 from pathlib import Path
 #from .config import *
 from cadlib.macro import *
-DATA_ROOT = '/home/rl4citygen/gsh/data/CMDGen/Sketch_1_Extrude_1_test'
-CAD_ROOT = '/home/rl4citygen/gsh/data/CMDGen/Sketch_1_Extrude_1_test/cad'
-CMD_ROOT = '/home/rl4citygen/gsh/data/CMDGen/Sketch_1_Extrude_1_test/cmd'
-PIC_ROOT = '/home/rl4citygen/gsh/data/CMDGen/Sketch_1_Extrude_1_test/pic'
+DATA_ROOT = '/scratch/sg7484/data/CMDGen/Sketch_1_Extrude_1_test'
+CAD_ROOT = '/scratch/sg7484/data/CMDGen/Sketch_1_Extrude_1_test/cad'
+CMD_ROOT = '/scratch/sg7484/data/CMDGen/Sketch_1_Extrude_1_test/cmd'
+PIC_ROOT = '/scratch/sg7484/data/CMDGen/Sketch_1_Extrude_1_test/pic'
 def get_args():
     parser = argparse.ArgumentParser()
     parser = argparse.ArgumentParser(description='CADGen')
@@ -21,13 +21,13 @@ def get_args():
     parser.add_argument('--resnet_out', type=int, default=32)
     parser.add_argument('--UNet_out', type=int, default=3)
 
-    parser.add_argument('--lr', type=float, default=1e-5)
+    parser.add_argument('--lr', type=float, default=1e-7)
     parser.add_argument('--weight_decay', type=float, default=0.05)
     parser.add_argument('--device', type=str, default='GPU')
     parser.add_argument('--epochs', type=int, default=300)
     parser.add_argument('--initial_epochs', type=int, default=10)
-    parser.add_argument('--train_batch', type=int, default=1)
-    parser.add_argument('--test_batch', type=int, default=1)
+    parser.add_argument('--train_batch', type=int, default=12)
+    parser.add_argument('--test_batch', type=int, default=8)
     parser.add_argument('--data_path', type=str, default='../data')
     parser.add_argument('--save_path', type=str, default='../results/exp1')
     parser.add_argument('--log_path', type=str)
@@ -96,8 +96,8 @@ def get_args():
 
     #loss paramaters
     parser.add_argument('--loss_weights', type=dict, default={
-            "loss_cmd_weight": 1.0,
-            "loss_args_weight": 2.0
+            "loss_cmd_weight": 2.0,
+            "loss_args_weight": 1.0
         })
     args = parser.parse_args()
     save_path = args.save_path

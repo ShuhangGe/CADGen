@@ -53,9 +53,11 @@ def _get_group_mask(commands, seq_dim=0):
     Args:
         commands: Shape [S, ...]
     """
+    print('_get_group_mask: ',commands.shape)
     with torch.no_grad():
         # group_mask = (commands == SOS_IDX).cumsum(dim=seq_dim)
         group_mask = (commands == EXT_IDX).cumsum(dim=seq_dim)
+        print('group_mask.shape: ',group_mask.shape)
         return group_mask
 
 
@@ -64,12 +66,14 @@ def _get_visibility_mask(commands, seq_dim=0):
     Args:
         commands: Shape [S, ...]
     """
+    print('_get_visibility_mask: ',commands.shape)
     S = commands.size(seq_dim)
     with torch.no_grad():
         visibility_mask = (commands == EOS_IDX).sum(dim=seq_dim) < S - 1
 
         if seq_dim == 0:
             return visibility_mask.unsqueeze(-1)
+        print('visibility_mask.shape: ',visibility_mask.shape)
         return visibility_mask
 
 

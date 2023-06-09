@@ -93,16 +93,20 @@ class ResNet50(nn.Module):
 
     def forward(self, x):
         out = self.conv1(x)
-        print('out1.shape: ',out.shape)
+        #print('out1.shape: ',out.shape)
         out = self.conv2(out)
-        print('out2.shape: ',out.shape)
+        #print('out2.shape: ',out.shape)
         out = self.conv3(out)
-        print('out3.shape: ',out.shape)
+        #print('out3.shape: ',out.shape)
         out = self.conv4(out)
-        print('out4.shape: ',out.shape)
+        #print('out4.shape: ',out.shape)
         out = self.conv5(out)
-        print('out5.shape: ',out.shape)
-
+        #print('out5.shape: ',out.shape)
+        '''out1.shape:  torch.Size([1, 64, 256, 256])
+        out2.shape:  torch.Size([1, 256, 256, 256])
+        out3.shape:  torch.Size([1, 512, 128, 128])
+        out4.shape:  torch.Size([1, 1024, 64, 64])
+        out5.shape:  torch.Size([1, 32, 32, 32])'''
         # out = self.avgpool(out)
         # out = out.reshape(x.shape[0], -1)
         # out = self.fc(out)

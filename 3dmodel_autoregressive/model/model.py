@@ -81,25 +81,41 @@ class Group(nn.Module):  # FPS + KNN
         self.group_size = group_size
         self.knn = KNN(k=self.group_size, transpose_mode=True)
 
-    def forward(self, xyz):
+    def forward(self, xyz, data_3d):
         '''
             input: B N 3
             ---------------------------
             output: B G M 3
             center : B G 3
         '''
+        #print('xyz.shape: ',xyz.shape)
+        #print('data_3d.shape: ',data_3d.shape)
+        '''xyz.shape:  torch.Size([12, 1728, 3])'''
         batch_size, num_points, _ = xyz.shape
         # fps the centers out
-        center = misc.fps(xyz, self.num_group) # B G 3
+        center = misc.fps(xyz, self.num_group, data_3d) # B G 3
+        #print('center.shape: ',center.shape)
+        '''center.shape:  torch.Size([12, 64, 3])'''
         # knn to get the neighborhood
-        _, idx = self.knn(xyz, center) # B G M
+        _, idx = self.knn(data_3d, center) # B G M
+        #print('idx.shape: ',idx.shape)
+        '''idx.shape:  torch.Size([12, 64, 27])'''
         assert idx.size(1) == self.num_group
         assert idx.size(2) == self.group_size
-        idx_base = torch.arange(0, batch_size, device=xyz.device).view(-1, 1, 1) * num_points
+        idx_base = torch.arange(0, batch_size, device=data_3d.device).view(-1, 1, 1) * num_points
+        #print('idx_base.shape: ',idx_base.shape)
+        '''idx_base.shape:  torch.Size([12, 1, 1])'''
         idx = idx + idx_base
         idx = idx.view(-1)
-        neighborhood = xyz.view(batch_size * num_points, -1)[idx, :]
+        #print('idx.shape: ',idx.shape)
+        '''idx.shape:  torch.Size([20736])'''
+        neighborhood = data_3d.contiguous().view(batch_size * num_points, -1)[idx, :]
+        #print('neighborhood.shape: ',neighborhood.shape)
+        '''neighborhood.shape:  torch.Size([20736, 3])'''
         neighborhood = neighborhood.view(batch_size, self.num_group, self.group_size, 3).contiguous()
+        #print('neighborhood2.shape: ',neighborhood.shape)
+        '''neighborhood2.shape:  torch.Size([12, 64, 27, 3])'''
+
         # normalize
         neighborhood = neighborhood - center.unsqueeze(2)
         return neighborhood, center
@@ -350,63 +366,79 @@ class Decoder(nn.Module):
                 tgt_bi_valid_mask=None,
                 encoder_history_states=None,):
         '''tgt: features from text
-            memory; features frome images'''
+            memory; features frome images batch_size =12'''
         assert tgt_key_padding_mask is None, 'not supported'
         assert tgt_mask.dim() == 2
         assert tgt_mask.shape[0] == tgt_mask.shape[1]
+        #print('tgt_mask: ',tgt_mask)
+        #print('tgt_mask: ',tgt_mask)
         # tgt_mask should always be 0/negative infinity
         # mask
         #print('tgt_mask.shape: ',tgt_mask.shape)
-        '''tgt_mask.shape:  torch.Size([13, 13])'''
+        '''gt_mask.shape:  torch.Size([64, 64])'''
         #print('tgt_key_padding_mask.shape: ',tgt_key_padding_mask.shape)NONE
-        tgt = tgt.transpose(0, 1)
-        memory = memory.transpose(0, 1)
-        # print('tgt.shape: ',tgt.shape)
-        # print('memory.shape: ',memory.shape)
-        '''tgt.shape:  torch.Size([2, 13, 768])
-            memory.shape:  torch.Size([2, 101, 768])'''
+        # tgt = tgt.transpose(0, 1)
+        # memory = memory.transpose(0, 1)
+        #print('tgt.shape: ',tgt.shape)
+        #print('memory.shape: ',memory.shape)
+        '''tgt.shape:  torch.Size([12, 64, 256])
+            memory.shape:  torch.Size([12, 64, 256])'''
         hidden_states = torch.cat((memory, tgt), dim=1)
-        # print('hidden_states.shape: ',hidden_states.shape)
-        '''hidden_states.shape:  torch.Size([2, 114, 768])'''
+        #print('hidden_states.shape: ',hidden_states.shape)
+        '''hidden_states.shape:  torch.Size([12, 114, 768])'''
         num_tgt = tgt.shape[1]
         num_memory = memory.shape[1]
         device = tgt.device
         dtype = tgt.dtype
         top_left = torch.zeros((num_memory, num_memory), device=device, dtype=dtype)
         #print('top_left.shape: ',top_left.shape)
+        '''top_left.shape:  torch.Size([64, 64])'''
         top_right = torch.full((num_memory, num_tgt), float('-inf'), device=tgt.device, dtype=dtype,)
         #print('top_right.shape: ',top_right.shape)
+        '''top_right.shape:  torch.Size([64, 64])'''
         bottom_left = torch.zeros((num_tgt, num_memory), dtype=dtype, device=tgt_mask.device,)
         #print('bottom_left.shape: ',bottom_left.shape)
+        '''bottom_left.shape:  torch.Size([64, 64])'''
         left = torch.cat((top_left, bottom_left), dim=0)
         right = torch.cat((top_right, tgt_mask.to(dtype)), dim=0)
         #print('left.shape: ',left.shape)
         #print('right.shape: ',right.shape)
-
+        '''left.shape:  torch.Size([128, 64])
+        right.shape:  torch.Size([128, 64])'''
         full_attention_mask = torch.cat((left, right), dim=1)[None, :]
         #print('full_attention_mask.shape: ',full_attention_mask.shape)
-        '''top_left.shape:  torch.Size([101, 101])
-            top_right.shape:  torch.Size([101, 13])
-            bottom_left.shape:  torch.Size([13, 101])
-            left.shape:  torch.Size([114, 101])
-            right.shape:  torch.Size([114, 13])
-            full_attention_mask.shape:  torch.Size([1, 114, 114])'''
-        #print(memory_key_padding_mask) # None
+        '''full_attention_mask.shape:  torch.Size([1, 128, 128])'''
+        #torch.set_printoptions(threshold=np.inf)
+        #print('full_attention_mask: ',full_attention_mask)
         if memory_key_padding_mask is None:
             memory_key_padding_mask = torch.full((memory.shape[0], memory.shape[1]), fill_value=False, device=device)
+        #print('memory_key_padding_mask.shape: ',memory_key_padding_mask.shape)
+        '''memory_key_padding_mask.shape:  torch.Size([12, 64])'''
         # if it is False, it means valid. That is, it is not a padding
         assert memory_key_padding_mask.dtype == torch.bool
         zero_negative_infinity = torch.zeros_like(memory_key_padding_mask, dtype=tgt.dtype)
+        #print('zero_negative_infinity.shape: ',zero_negative_infinity.shape)
+        '''zero_negative_infinity.shape:  torch.Size([12, 64])'''
         #print('zero_negative_infinity: ',zero_negative_infinity)
         zero_negative_infinity[memory_key_padding_mask] = float('-inf')
-        #print('zero_negative_infinity2: ',zero_negative_infinity)
-        #print(zero_negative_infinity)
         full_attention_mask = full_attention_mask.expand((memory_key_padding_mask.shape[0], num_memory + num_tgt, num_memory + num_tgt))
+        #print('full_attention_mask.shape: ',full_attention_mask.shape)
+        '''full_attention_mask.shape:  torch.Size([12, 128, 128])'''
         full_attention_mask = full_attention_mask.clone()
         #print(full_attention_mask)
         origin_left = full_attention_mask[:, :, :num_memory]
+        #print('origin_left.shape: ',origin_left.shape)
+        '''origin_left.shape:  torch.Size([12, 128, 64])'''
         update = zero_negative_infinity[:, None, :]
-        full_attention_mask[:, :, :num_memory] = origin_left + update
+        #print('update.shape: ',update.shape)
+        '''update.shape:  torch.Size([12, 1, 64])'''
+        temp = origin_left + update
+        full_attention_mask[:, :, :num_memory] = temp
+        #print('temp.shape: ',temp.shape)
+        #print('full_attention_mask.shape: ',full_attention_mask.shape)
+        '''temp.shape:  torch.Size([12, 128, 64])
+        full_attention_mask.shape:  torch.Size([12, 128, 128])'''
+
 
         if tgt_bi_valid_mask is not None:
             # verify the correctness
@@ -419,17 +451,24 @@ class Decoder(nn.Module):
 
         # add axis for multi-head
         full_attention_mask = full_attention_mask[:, None, :, :]
-        
+        #print('full_attention_mask.shape: ',full_attention_mask.shape)
+        '''full_attention_mask.shape:  torch.Size([12, 1, 128, 128])'''
         result = self.decorde(
                 hidden_states=hidden_states,
                 attention_mask=full_attention_mask,
                 encoder_history_states=None,
             )
         result = list(result)
-        result[0] = result[0][:, num_memory:].transpose(0, 1)
+        #print('num_memory: ',num_memory)
+        #print('num_tgt: ',num_tgt)
+        result[0] = result[0][:, num_memory:]#.transpose(0, 1)
+        #print('result[0]: ',result[0].shape)
+        '''result[0]:  torch.Size([1, 64, 256])'''
         command_logits, args_logits = self.fcn(result[0])
-        #print('command_logits: ',command_logits)
-        #print('args_logits: ',args_logits)
+        #print('command_logits.shape: ',command_logits.shape)
+        #print('args_logits.shape: ',args_logits.shape)
+        '''command_logits.shape:  torch.Size([12, 64, 6])
+        args_logits.shape:  torch.Size([12, 64, 16, 257])'''
         out_logits = (command_logits, args_logits)
         return out_logits
 # new decoder
@@ -487,121 +526,94 @@ class Views2Points(nn.Module):
         self.text_encoder = Text_Encoder(config)
 
     def forward(self, side, front, top, cad_data, command, args):
-        # print('model start ')
+        # print('\n \n model start ')
         # print('side.shape: ',side.shape)
         # print('front.shape: ',front.shape)
         # print('top.shape: ',top.shape)
         # print('cad_data.shape: ',cad_data.shape)
-        print('command.shape: ',command.shape)
-        print('args.shape: ',args.shape)
-        '''command.shape:  torch.Size([1, 64])
+        # print('command.shape: ',command.shape)
+        # print('args.shape: ',args.shape)
+        '''side.shape:  torch.Size([1, 3, 256, 256])
+            front.shape:  torch.Size([1, 3, 256, 256])
+            top.shape:  torch.Size([1, 3, 256, 256])
+            cad_data.shape:  torch.Size([1, 1728, 3])
+            command.shape:  torch.Size([1, 64])
             args.shape:  torch.Size([1, 64, 16])'''
-        if torch.isnan(side).any():
-            print('side nan')
-        if torch.isnan(front).any():
-            print('front nan')
-        if torch.isnan(top).any():
-            print('top nan')
-        print('side.shape: ',side.shape)
         side_feature = self.img_feature(side)
-        if torch.isnan(side_feature).any():
-            print('img_feature1 nan')
         front_feature = self.img_feature(front)
-        if torch.isnan(side_feature).any():
-            print('img_feature2 nan') 
         top_feature = self.img_feature(top)
-        if torch.isnan(side_feature).any():
-            print('img_feature3 nan') 
-
-        #print('side_feature.shape: ',side_feature.shape)
-        #print('front_features.shape: ',front_feature.shape)
-        #print('top_feature.shape: ',top_feature.shape)
+        # print('side_feature.shape: ',side_feature.shape)
+        # print('front_features.shape: ',front_feature.shape)
+        # print('top_feature.shape: ',top_feature.shape)
+        '''side_feature.shape:  torch.Size([1, 32, 32, 32])
+        front_features.shape:  torch.Size([1, 32, 32, 32])
+        top_feature.shape:  torch.Size([1, 32, 32, 32])'''
         assert side_feature.shape[-1]==front_feature.shape[-1]==top_feature.shape[-1]==side_feature.shape[-2]==front_feature.shape[-2]==top_feature.shape[-2]
         repeat_num = side_feature.shape[-1]
         side_3d = side_feature.unsqueeze(-3).repeat(1,1,repeat_num,1,1)
         front_3d = front_feature.unsqueeze(-2).repeat(1,1,1,repeat_num,1)
         top_3d = top_feature.unsqueeze(-1).repeat(1,1,1,1,repeat_num)
-        #print('side_3d.shape: ',side_3d.shape)
-        #print('front_3d.shape: ',front_3d.shape)
-        #print('top_3d.shape: ',top_3d.shape)
+        # print('side_3d.shape: ',side_3d.shape)
+        # print('front_3d.shape: ',front_3d.shape)
+        # print('top_3d.shape: ',top_3d.shape)
+        '''side_3d.shape:  torch.Size([1, 32, 32, 32, 32])
+        front_3d.shape:  torch.Size([1, 32, 32, 32, 32])
+        top_3d.shape:  torch.Size([1, 32, 32, 32, 32])'''
         feature_3d = torch.cat((side_3d,front_3d,top_3d),dim=1)
-        ##print('feature_3d1.shape: ',feature_3d.shape)
+        #print('feature_3d1.shape: ',feature_3d.shape)
+        '''feature_3d1.shape:  torch.Size([1, 96, 32, 32, 32])'''
         feature_3d = self.unet(feature_3d)
         feature_3d = feature_3d.float()
         #print('feature_3d.shape: ',feature_3d.shape)
-        '''feature_3d.shape:  torch.Size([1, 3, 100, 100, 100])'''
-        if torch.isnan(feature_3d).any():
-            print('feature_3d_unet nan')
-        #print('feature_3d2.shape: ',feature_3d.shape)
-        '''side_feature.shape:  torch.Size([1, 32, 64, 64])
-        feature_3d1.shape:  torch.Size([1, 96, 64, 64, 64])
-        feature_3d2.shape:  torch.Size([1, 32, 64, 64, 64])'''
-        '''cad_data.shape:  torch.Size([50, 1024, 3])'''
+        '''feature_3d.shape:  torch.Size([1, 3, 32, 32, 32])'''
 
-        #print('cad_data.shape',cad_data.shape)
         data = F.grid_sample(feature_3d, cad_data.view(-1,self.grid_sample,self.grid_sample,self.grid_sample,3), mode='bilinear', padding_mode='zeros', align_corners=None)
         #print('data1.shape: ',data.shape)
-        if torch.isnan(data).any():
-            print('data1 nan')
-        #print('data0.shape: ',data.shape)
+        '''data1.shape:  torch.Size([1, 3, 12, 12, 12])'''
         data = data.view(data.shape[0],data.shape[1],-1).permute(0,2,1)
-        print('data2.shape: ',data.shape)
-        '''data1.shape:  torch.Size([32, 3, 12, 12, 12])
-        data2.shape:  torch.Size([32, 1728, 3])'''
-        #print('data.shape: ',data.shape)
-                #print('pts.shap: ',pts.shape)
-        #print('\n','forwardforwardforwardforward','\n')
-        neighborhood, center = self.group_divider(cad_data)
-        if torch.isnan(neighborhood).any() or torch.isnan(center).any():
-            print('data1 nan')
-        
+        #print('data2.shape: ',data.shape)
+        '''data2.shape:  torch.Size([1, 1728, 3])'''
+        neighborhood, center = self.group_divider(cad_data,data)
         #print('neighborhood.shape:',neighborhood.shape)
-        '''neighborhood.shape: torch.Size([50, 32, 32, 3])[batchsize]'''
         #print('center.shape:',center.shape)
-        '''center.shape: torch.Size([50, 32, 3])'''
+        '''neighborhood.shape: torch.Size([1, 64, 27, 3])
+        center.shape: torch.Size([1, 64, 3])'''
         neighborhood = data.view(data.shape[0],self.num_group,self.group_size,3)
         x_full= self.MAE_encoder(neighborhood, center)
-        if torch.isnan(x_full).any():
-            print('x_full nan')
-        
+        #print('x_full[0]: ',x_full[0])
         #print('x_full.shape: ',x_full.shape)
-        '''x_full.shape:  torch.Size([50, 32, 128])'''
+        '''x_full.shape:  torch.Size([1, 64, 256])'''
         B,_,C = x_full.shape # B VIS C
-
         pos_full = self.decoder_pos_embed(center).reshape(B, -1, C)
-        if torch.isnan(pos_full).any():
-            print('pos_full nan')
         #print('pos_full.shape: ',pos_full.shape)
-        '''pos_full.shape:  torch.Size([50, 32, 128])'''
+        '''pos_full.shape:  torch.Size([1, 64, 256])'''
         z = x_full+pos_full
         text = self.text_encoder(command, args)
-        if torch.isnan(text).any():
-            print('text nan')
         # print('z.shape: ',z.shape)
         # print('text.shape: ',text.shape)
-        '''z.shape:  torch.Size([50, 64, 256])[batchsize, num_group, dim]
-            text.shape:  torch.Size([64, 50, 256])[tgt_len ,batchsize, dim]'''
+        '''z.shape:  torch.Size([1, 64, 256])
+        text.shape:  torch.Size([64, 1, 256])'''
         text = text.permute(1,0,2)
         #print('text.shape: ',text.shape)
-        #print('z.shape: ',z.shape)
-        future_mask = _generate_future_mask(text.shape[0],text.dtype,text.device)
-        if torch.isnan(future_mask).any():
-            print('future_mask nan')
+        '''text.shape:  torch.Size([1, 64, 256])'''
+        future_mask = _generate_future_mask(text.shape[1],text.dtype,text.device)
+        #print('future_mask.shape: ',future_mask.shape)
+        '''future_mask.shape:  torch.Size([64, 64])'''
+        # print('text.shape: ',text.shape)
+        # print('z.shape: ',z.shape)
+        # print('text[0]: ',text[0])
+        # print('z[0]: ',z[0])
         out_logits = self.bert_decoder(text,z,future_mask)
-        if torch.isnan(out_logits[0]).any() or torch.isnan(out_logits[1]).any():
-            print('out_logits nan')
-        #print('out_logits[0].shape: ',out_logits[0].shape)
-        #print('out_logits[1].shape: ',out_logits[1].shape)
-        #output.shape:  torch.Size([50, 64, 256])
+
         #out_logits = _make_batch_first(*output)
         res = { 
             "command_logits": out_logits[0],
             "args_logits": out_logits[1]
         }
         #print('out_logits[0].shape: ',out_logits[0].shape)
-        '''out_logits[0].shape:  torch.Size([50, 60, 6])'''
         #print('out_logits[1].shape: ',out_logits[1].shape)
-        '''out_logits[1].shape:  torch.Size([50, 60, 16, 257])'''
+        '''out_logits[0].shape:  torch.Size([1, 64, 6])
+        out_logits[1].shape:  torch.Size([1, 64, 16, 257])'''
         return res
 
         

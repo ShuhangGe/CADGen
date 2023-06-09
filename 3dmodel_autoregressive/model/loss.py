@@ -70,6 +70,7 @@ class CADLoss(nn.Module):
         #print('loss_args: ',loss_args)
         loss_cmd = self.weights["loss_cmd_weight"] * loss_cmd
         loss_args = self.weights["loss_args_weight"] * loss_args
+        print('loss_cmd: ',loss_cmd, 'loss_args: ',loss_args)
         '''
         mask_token.shape:  torch.Size([50, 19, 128])
         x_full.shape:  torch.Size([50, 32, 128])

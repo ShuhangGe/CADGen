@@ -59,7 +59,7 @@ def collate_fn(batch):
     #print('type(batch): ',type(batch))
     #print('elem_type: ',elem_type)
     if isinstance(batch, list) and isinstance(elem_type, dict):
-        print('1123132131231123123123132')
+        #print('1123132131231123123123132')
         for data in batch:
             front_pic,top_pic,side_pic,cad_data,command,paramaters = data['data']
             if (front_pic is not None) and (top_pic is not None) and (side_pic is not None):
@@ -81,7 +81,7 @@ def collate_fn(batch):
         return torch.stack(batch, 0, out=out)
     elif elem_type.__module__ == 'numpy' and elem_type.__name__ != 'str_' \
             and elem_type.__name__ != 'string_':
-        print('numpy')
+        #print('numpy')
         elem = batch[0]
         if elem_type.__name__ == 'ndarray':
             # array of string classes and object

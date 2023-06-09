@@ -578,8 +578,8 @@ class Views2Points(nn.Module):
         # print('front.shape: ',front.shape)
         # print('top.shape: ',top.shape)
         # print('cad_data.shape: ',cad_data.shape)
-        print('command.shape: ',command.shape)
-        print('args.shape: ',args.shape)
+        #print('command.shape: ',command.shape)
+        #print('args.shape: ',args.shape)
         '''command.shape:  torch.Size([1, 64])
             args.shape:  torch.Size([1, 64, 16])'''
         if torch.isnan(side).any():
@@ -716,10 +716,9 @@ if __name__=='__main__':
     # side = torch.full((1,3,200,200),255).type(torch.cuda.FloatTensor).to(device)  
     # front = torch.full((1,3,200,200),255).type(torch.cuda.FloatTensor).to(device)
     # top = torch.full((1,3,200,200),255).type(torch.cuda.FloatTensor).to(device)
-    front = Image.open('/scratch/sg7484/data/CMDGen/data3D_pic/abc_0000_step_v00/00005885/00005885_f.png')
-    side = Image.open('/scratch/sg7484/data/CMDGen/data3D_pic/abc_0000_step_v00/00005885/00005885_r.png')  
-    top = Image.open('/scratch/sg7484/data/CMDGen/data3D_pic/abc_0000_step_v00/00005885/00005885_t.png')
-    
+    front = Image.open('/scratch/sg7484/data/CMDGen/data3D_pic/abc_0070_step_v00/00700801/00700801_f.png')
+    side = Image.open('/scratch/sg7484/data/CMDGen/data3D_pic/abc_0070_step_v00/00700801/00700801_r.png')  
+    top = Image.open('/scratch/sg7484/data/CMDGen/data3D_pic/abc_0070_step_v00/00700801/00700801_t.png')
     front = transforms(front) 
     side = transforms(side) 
     top = transforms(top) 
@@ -730,8 +729,8 @@ if __name__=='__main__':
     # cad_data = torch.rand(1, 1728, 3).type(torch.cuda.FloatTensor).to(device)
     # command, args = torch.rand(1, 64).type(torch.cuda.FloatTensor).to(device), torch.rand(1, 64, 16).type(torch.cuda.FloatTensor).to(device)
     
-    cad_dir = '/scratch/sg7484/data/CMDGen/Sketch_1_Extrude_1/cad/00005885.npy'
-    cmd_dir = '/scratch/sg7484/data/CMDGen/Sketch_1_Extrude_1/cmd/00005885.h5'
+    cad_dir = '/scratch/sg7484/data/CMDGen/Sketch_1_Extrude_1/cad/00700801.npy'
+    cmd_dir = '/scratch/sg7484/data/CMDGen/Sketch_1_Extrude_1/cmd/00700801.h5'
     cad_path = os.path.join(cad_dir)
     #print('cad_path: ',cad_path)
     cad_data = IO.get(cad_path).astype(np.float32)

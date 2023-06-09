@@ -157,36 +157,47 @@ def main():
     writer = SummaryWriter(args.log_path)
     best_test = 100000
     #print('44444444444444444444444444444444444444444444444')
-
     for epoch in range(args.epochs):
         loss_cmd_train = 0
         loss_args_train = 0
         train_num = 0
         #print('5555555555555555555555555555555555555555555555555')
-
         for index, data in enumerate(train_loader,0):
             #print('000000000000000000000000000000000')
-            print('data_id: ', data['id'])
+            
             model.train()
-            front_pic,top_pic,side_pic,cad_data,command,paramaters = data['data']
+            front_pic,top_pic,side_pic,cad_data,command,paramaters,data_num= data
+            print('data_id: ', data_num)
             front_pic = front_pic.to(args.device)
             top_pic = top_pic.to(args.device)
             side_pic = side_pic.to(args.device)
             cad_data = cad_data.to(args.device)
             command = command.to(args.device)
             paramaters = paramaters.to(args.device)
+            train_command = command[:,:-1]
+            train_paramaters = paramaters[:,:-1,:]
+            tgt_commands = command[:,1:]
+            print('tgt_commands.shape: ',tgt_commands.shape)
+            tgt_paramaters = paramaters[:,1:,:]
+            print('tgt_paramaters.shape: ',tgt_paramaters.shape)
+            # print('train_command.shape: ',train_command.shape)
+            # print('train_paramaters.shape: ',train_paramaters.shape)
+            # print('tgt_commands.shape: ',tgt_commands.shape)
+            # print('tgt_paramaters.shape: ',tgt_paramaters.shape)
+            # print('train_command: ',train_command)
+            # print('tgt_commands: ',tgt_commands)
             '''cad_data.shape:  torch.Size([50, 1024, 3])'''
             #print('5555555555555555555555555555555555555555')
             with autocast():
-                output = model(front_pic,top_pic,side_pic,cad_data,command,paramaters)
+                output = model(front_pic,top_pic,side_pic,cad_data,train_command,train_paramaters)
                 #print('output: ',output)
                 #print('6666666666666666666666666666666666666666')
-                output["tgt_commands"] = command
-                output["tgt_args"] = paramaters
+                output["tgt_commands"] = tgt_commands
+                output["tgt_args"] = tgt_paramaters
                 loss_dict = loss_fun(output)
             # with autocast():
                 
-            print('len(train_loader): ',len(train_loader),'index: ',index)
+            print('epoch: ',epoch, 'len(train_loader): ',len(train_loader),'index: ',index)
             loss_cmd_train += loss_dict["loss_cmd"]
             loss_args_train += loss_dict["loss_args"]
             train_num += 1
@@ -223,20 +234,26 @@ def main():
         test_num = 0
         with torch.no_grad():
             for index, data in enumerate(test_loader,0):
-                front_pic,top_pic,side_pic,cad_data,command,paramaters = data['data']
+                front_pic,top_pic,side_pic,cad_data,command,paramaters,data_num = data
+                print('data_id: ', data_num)
+
                 front_pic = front_pic.to(args.device)
                 top_pic = top_pic.to(args.device)
                 side_pic = side_pic.to(args.device)
                 cad_data = cad_data.to(args.device)
                 command = command.to(args.device)
                 paramaters = paramaters.to(args.device)
+                train_command = command[:,:-1]
+                train_paramaters = paramaters[:,:-1,:]
+                tgt_commands = command[:,1:]
+                tgt_paramaters = paramaters[:,1:,:]
                 '''cad_data.shape:  torch.Size([50, 1024, 3])'''
                 print('---------------')
                 with autocast():
-                    output_test = model(front_pic,top_pic,side_pic,cad_data,command,paramaters)
+                    output_test = model(front_pic,top_pic,side_pic,cad_data,train_command,train_paramaters)
                     #print('output: ',output)
-                    output_test["tgt_commands"] = command
-                    output_test["tgt_args"] = paramaters
+                    output_test["tgt_commands"] = tgt_commands
+                    output_test["tgt_args"] = tgt_paramaters
 
                     loss_dict_test = loss_fun(output_test)
                     loss_cmd_test += loss_dict["loss_cmd"]
@@ -256,7 +273,7 @@ def main():
             best_test = loss_args_test
             model_save = os.path.join(args.model_path,f'CADGEN_best')
             torch.save(model.state_dict(), model_save)
-        if epoch%50==0:
+        if epoch%1==0:
             model_save = os.path.join(args.model_path,f'CADGEN_{epoch}')
             torch.save(model.state_dict(), model_save)
     model_save = os.path.join(args.model_path,f'CADGEN_latest')
