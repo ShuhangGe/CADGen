@@ -18,6 +18,7 @@ import torch.optim as optim
 import numpy as np
 from torch.cuda.amp import autocast as autocast
 import h5py
+torch.set_printoptions(profile="full")
 
 from cadlib.macro import *
 
@@ -44,7 +45,7 @@ def main():
     model = Views2Points(cfg)
     cfg.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # load from checkpoint if provided
-    model_path = '/scratch/sg7484/CMDGen/results/train_1e-6_fulldata_autoregressive_amdacd2_1/model/CADGEN_3'
+    model_path = '/scratch/sg7484/CMDGen/results/train_1e-6_fulldata_autoregressive_nomask/model/CADGEN_3'
     model_par = torch.load(model_path)
     model.load_state_dict(model_par)
     model = model.to(cfg.device)
@@ -54,7 +55,7 @@ def main():
     dataset_test = CADGENdataset(cfg, test=True)
     test_loader = torch.utils.data.DataLoader(dataset_test,
                                                 batch_size=1,
-                                                shuffle=True,
+                                                shuffle=False,
                                                 num_workers=cfg.num_workers)
     print("Total number of test data:", len(test_loader))
 
@@ -66,6 +67,8 @@ def main():
     # evaluate
 
     for i, data in enumerate(test_loader):
+        # if i ==0:
+        #     continue
         front_pic,top_pic,side_pic,cad_data,command,paramaters, data_num= data
         print('data_id: ', data_num)
 
@@ -77,16 +80,20 @@ def main():
         cad_data = cad_data.to(cfg.device)
         command = command.to(cfg.device)
         paramaters = paramaters.to(cfg.device)
-
+        # print('command[:,:2,:]: ',command[:,:2])
+        # print('paramaters[:,:2,:]: ',paramaters[:,:2,:])
         tgt_commands = command[:,1:]
         tgt_paramaters = paramaters[:,1:,:]
         
-        
+        command_ys = command[:,:5]
+        paramaters_ys = paramaters[:,:5,:]
         gt_vec = torch.cat([command.unsqueeze(-1), paramaters], dim=-1).squeeze(1).detach().cpu().numpy()
-        command_ys = args = torch.ones(1, 1).fill_(ALL_COMMANDS.index('SOL')). \
-            type(torch.long).to(cfg.device)
-        paramaters_ys = torch.ones(1, 1, N_ARGS).fill_(PAD_VAL). \
-            type(torch.long).to(cfg.device)
+        # command_ys = args = torch.ones(1, 1).fill_(ALL_COMMANDS.index('SOL')). \
+        #     type(torch.long).to(cfg.device)
+        # paramaters_ys = torch.ones(1, 1, N_ARGS).fill_(PAD_VAL). \
+        #     type(torch.long).to(cfg.device)
+            
+            
         # cad_vec = torch.cat([paramaters_ys.unsqueeze(0),paramaters_ys],dim=-1)
         # pad_len = max_len - cad_vec.shape[0]
         # cad_vec = np.concatenate([cad_vec, EOS_VEC[np.newaxis].repeat(pad_len, axis=0)], axis=0)
@@ -96,14 +103,21 @@ def main():
         #print('paramaters_ys: ',paramaters_ys.shape)
         #print('gt_vec.shape: ',gt_vec.shape)
         #commands_ = gt_vec[:, :, 0]
+        z = model.forward_encoder(front_pic,top_pic,side_pic,cad_data,command_ys, paramaters_ys)
         for j in range(max_len-1):
             with torch.no_grad():
                 with autocast():
                     #print('start model')
-                    outputs = model(front_pic,top_pic,side_pic,cad_data,command_ys, paramaters_ys)
+                    outputs = model.forward_decoder(z,command_ys, paramaters_ys)
                     # command_ys = outputs['command_logits']
                     # paramaters_ys = outputs['args_logits']
+
+                    outputs["command_logits"]= outputs["command_logits"][:,-1,:]
+                    outputs["args_logits"]= outputs["args_logits"][:,-1,:,:]
+                    #print('outputs["command_logits"].shape: ',outputs["command_logits"].shape)
+                    #print('outputs["args_logits"].shape: ',outputs["args_logits"].shape)
                     out_cad_vec = logits2vec(outputs)
+                    out_cad_vec = out_cad_vec[None,:,:]
                     #print('out_cad_vec: ',out_cad_vec)
                     #print('out_cad_vec.shape: ',out_cad_vec.shape)
                     '''out_cad_vec.shape:  (1, 1, 17)'''
@@ -122,14 +136,18 @@ def main():
 
                     command_ys = torch.cat([command_ys,command_temp.unsqueeze(0)],dim=-1)
                     paramaters_ys = torch.cat([paramaters_ys,paramaters_temp.unsqueeze(0)],dim = 1)
+                    print(paramaters_ys)
                     #print('paramaters_ys: ',paramaters_ys)
                     #print(f'command_ys.shape: {command_ys.shape}, paramaters_ys.shape: {paramaters_ys.shape}')
                     #print('command_ys.shape: ',command_ys.shape)
                     #print('paramaters_ys.shape: ',paramaters_ys.shape)
+                    break
                     if command_temp[0] == ALL_COMMANDS.index('EOS'):
                         break
-        print('tgt_commands: ',tgt_commands)
         print('command_ys: ',command_ys)
+        print('tgt_commands: ',tgt_commands)
+        #print('tgt_paramaters: ',tgt_paramaters)
+        break
                     #torch.cat(command_ys,out_cad_vec)
 #                     '''out_logits[0].shape:  torch.Size([1, 64, 6])
 #                     out_logits[1].shape:  torch.Size([1, 64, 16, 257])'''

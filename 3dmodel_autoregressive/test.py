@@ -39,17 +39,17 @@ cfg = parser.get_args()
 model = Views2Points(cfg)
 cfg.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # load from checkpoint if provided
-model_path = '/scratch/sg7484/CMDGen/results/train_1e-6_fulldata_autoregressive_amdacd2_1/model/CADGEN_3'
+model_path = '/scratch/sg7484/CMDGen/results/train_1e-6_fulldata_autoregressive_nomask/model/CADGEN_4'
 model_par = torch.load(model_path)
 model.load_state_dict(model_par)
 model = model.to(cfg.device)
 model.eval()
 
 # create dataloader
-dataset_test = CADGENdataset(cfg, 'test')
+dataset_test = CADGENdataset(cfg, test=True)
 test_loader = torch.utils.data.DataLoader(dataset_test,
                                             batch_size=cfg.test_batch,
-                                            shuffle=True,
+                                            shuffle=False,
                                             num_workers=cfg.num_workers)
 print("Total number of test data:", len(test_loader))
 
@@ -89,7 +89,8 @@ for i, data in enumerate(test_loader):
             outputs["tgt_args"] = tgt_paramaters
             batch_out_vec = logits2vec(outputs)
             print('out put command: ',batch_out_vec[:,:,0])
-            print('target command: ',tgt_commands )
+            print('target command: ',tgt_commands)
+    
     # for j in range(batch_size):
     #     out_vec = batch_out_vec[j]
     #     seq_len = commands_[j].tolist().index(EOS_IDX)

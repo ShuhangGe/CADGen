@@ -15,6 +15,9 @@ from knn_cuda import KNN
 #from extensions.chamfer_dist import ChamferDistanceL1, ChamferDistanceL2
 from .model_utils import _make_seq_first, _make_batch_first, \
     _get_padding_mask, _get_key_padding_mask, _get_group_mask
+    
+from .unet3d import ResidualUNet3D
+from .resnet_backbone import ResNet50
 
 import logging
 import copy
@@ -594,51 +597,7 @@ class UNet(nn.Module):
         #print('output4.shape: ',output4.shape)
         return output4
 
-class ResnetBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, stride):
-        super(ResnetBlock, self).__init__()
-        self.conv0 = nn.Conv2d(3, in_channels, kernel_size=1, bias=False)
-        self.bn0 = nn.BatchNorm2d(in_channels)
-        self.conv1 = nn.Conv2d(
-            in_channels,
-            out_channels,
-            kernel_size=3,
-            stride=stride,  # downsample with first conv
-            padding=1,
-            bias=False)
-        self.bn1 = nn.BatchNorm2d(out_channels)
-        self.conv2 = nn.Conv2d(
-            out_channels,
-            out_channels,
-            kernel_size=3,
-            stride=1,
-            padding=1,
-            bias=False)
-        self.bn2 = nn.BatchNorm2d(out_channels)
 
-        self.shortcut = nn.Sequential()
-        if in_channels != out_channels:
-            self.shortcut.add_module(
-                'conv',
-                nn.Conv2d(
-                    in_channels,
-                    out_channels,
-                    kernel_size=1,
-                    stride=stride,  # downsample
-                    padding=0,
-                    bias=False))
-            self.shortcut.add_module('bn', nn.BatchNorm2d(out_channels))  # BN
-
-    def forward(self, x):
-        x = self.conv0(x)
-        x = self.bn0(x)
-        x = F.relu(x)
-        y = F.relu(self.bn1(self.conv1(x)), inplace=True)
-        y = self.bn2(self.conv2(y))
-        y += self.shortcut(x)
-        y = F.relu(y, inplace=True)  # apply ReLU after addition
-
-        return y
 @MODELS.register_module()
 class Views2Points(nn.Module):
     '''
@@ -647,7 +606,7 @@ class Views2Points(nn.Module):
     '''
     def __init__(self,config):
         super().__init__()
-        self.img_feature =ResnetBlock(config.resnet_in,config.resnet_out,2)
+        self.img_feature = ResNet50(resnet_out = int(config.resnet_out/4))
         self.conv3d = nn.Conv3d(in_channels=96,
                         out_channels=96,
                         kernel_size=(1, 1, 1),

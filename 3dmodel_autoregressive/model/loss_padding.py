@@ -57,13 +57,17 @@ class CADLoss(nn.Module):
         mask = self.cmd_args_mask[tgt_commands.long()]
         if (torch.isnan(command_logits).any() or torch.isnan(command_logits).any()) or (torch.isnan(args_logits).any() or torch.isnan(args_logits).any()):
             print('\n','nanananan','\n')
-
-        #loss_cmd = F.cross_entropy(command_logits[padding_mask.bool()].reshape(-1, self.n_commands), tgt_commands[padding_mask.bool()].reshape(-1).long().clamp(0, 6),ignore_index=-1)
-        loss_cmd = F.cross_entropy(command_logits.reshape(-1, self.n_commands), tgt_commands.reshape(-1).long().clamp(0, 6),ignore_index=-1)
-
+        #print('command_logits: ',command_logits.shape)
+        #print('tgt_commands: ',tgt_commands.shape)
+        #print(tgt_commands[padding_mask.bool()].reshape(-1).long())
+        loss_cmd = F.cross_entropy(command_logits[padding_mask.bool()].reshape(-1, self.n_commands), tgt_commands[padding_mask.bool()].reshape(-1).long().clamp(0, 6),ignore_index=-1)
+        #print('----------------------------')
         np.set_printoptions(threshold=np.inf)
+        #print((args_logits[mask.bool()].reshape(-1, self.args_dim)).detach().cpu().numpy())
         loss_args = F.cross_entropy(args_logits[mask.bool()].reshape(-1, self.args_dim), (tgt_args[mask.bool()].reshape(-1).long() + 1).clamp(0, 256),ignore_index=-1)  # shift due to -1 PAD_VAL
-
+        #print('*******************************************************')
+        #print('loss_cmd: ',loss_cmd)
+        #print('loss_args: ',loss_args)
         loss_cmd = self.weights["loss_cmd_weight"] * loss_cmd
         loss_args = self.weights["loss_args_weight"] * loss_args
         print('loss_cmd: ',loss_cmd, 'loss_args: ',loss_args)

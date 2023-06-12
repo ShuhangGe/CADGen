@@ -36,8 +36,41 @@ from torch.nn.modules.dropout import Dropout
 from torch.nn.modules.linear import Linear
 from torch.nn.modules.normalization import LayerNorm
 import utils.parser as parser
+torch.set_printoptions(profile="full")
+import logging
+from logging import handlers
+from model.model_utils import _get_padding_mask, _get_visibility_mask
 
+class Logger(object):
+    level_relations = {
+        'debug':logging.DEBUG,
+        'info':logging.INFO,
+        'warning':logging.WARNING,
+        'error':logging.ERROR,
+        'crit':logging.CRITICAL
+    }#日志级别关系映射
 
+    def __init__(self,filename,level='info',when='D',backCount=3,fmt='%(asctime)s - %(pathname)s[line:%(lineno)d] - %(levelname)s: %(message)s'):
+        self.logger = logging.getLogger(filename)
+        format_str = logging.Formatter(fmt)#设置日志格式
+        self.logger.setLevel(self.level_relations.get(level))#设置日志级别
+        # sh = logging.StreamHandler()#往屏幕上输出
+        # sh.setFormatter(format_str) #设置屏幕上显示的格式
+        th = handlers.TimedRotatingFileHandler(filename=filename,when=when,backupCount=backCount,encoding='utf-8')#往文件里写入#指定间隔时间自动生成文件的处理器
+        #实例化TimedRotatingFileHandler
+        #interval是时间间隔，backupCount是备份文件的个数，如果超过这个个数，就会自动删除，when是间隔的时间单位，单位有以下几种：
+        # S 秒
+        # M 分
+        # H 小时、
+        # D 天、
+        # W 每星期（interval==0时代表星期一）
+        # midnight 每天凌晨
+        th.setFormatter(format_str)#设置文件里写入的格式
+        #self.logger.addHandler(sh) #把对象加到logger里
+        self.logger.addHandler(th)
+logname = '/scratch/sg7484/CMDGen/results/paramaters' + '/auto.log'
+log = Logger(logname,level='debug')
+#log.logger.info(f'-->name: {name}, -->grad_requirs: {param.requires_grad},-->grad_value: {param.grad},\n')
 #from bert.modeling_bert improt BertEncoder
 
 class Encoder(nn.Module):   ## Embedding module
@@ -524,8 +557,9 @@ class Views2Points(nn.Module):
         self.group_divider = Group(num_group = self.num_group, group_size = self.group_size)
         self.grid_sample = config.grid_sample
         self.text_encoder = Text_Encoder(config)
-
-    def forward(self, side, front, top, cad_data, command, args):
+    def forward_encoder(self, side, front, top, cad_data, command, args):
+        autoregressive_index = command.size(1)
+        log.logger.info(f'-->autoregressive_index: {autoregressive_index} \n')
         # print('\n \n model start ')
         # print('side.shape: ',side.shape)
         # print('front.shape: ',front.shape)
@@ -588,19 +622,21 @@ class Views2Points(nn.Module):
         #print('pos_full.shape: ',pos_full.shape)
         '''pos_full.shape:  torch.Size([1, 64, 256])'''
         z = x_full+pos_full
+        return z
+    def forward_decoder(self,z,command, args):
         text = self.text_encoder(command, args)
-        # print('z.shape: ',z.shape)
-        # print('text.shape: ',text.shape)
+        #print('z.shape: ',z.shape)
+        #print('text.shape: ',text.shape)
         '''z.shape:  torch.Size([1, 64, 256])
         text.shape:  torch.Size([64, 1, 256])'''
         text = text.permute(1,0,2)
         #print('text.shape: ',text.shape)
         '''text.shape:  torch.Size([1, 64, 256])'''
         future_mask = _generate_future_mask(text.shape[1],text.dtype,text.device)
+        #print('future_mask: ',future_mask)
         #print('future_mask.shape: ',future_mask.shape)
         '''future_mask.shape:  torch.Size([64, 64])'''
-        # print('text.shape: ',text.shape)
-        # print('z.shape: ',z.shape)
+        #print('text.shape: ',text.shape)
         # print('text[0]: ',text[0])
         # print('z[0]: ',z[0])
         out_logits = self.bert_decoder(text,z,future_mask)
@@ -612,10 +648,15 @@ class Views2Points(nn.Module):
         }
         #print('out_logits[0].shape: ',out_logits[0].shape)
         #print('out_logits[1].shape: ',out_logits[1].shape)
+        print('\n')
         '''out_logits[0].shape:  torch.Size([1, 64, 6])
         out_logits[1].shape:  torch.Size([1, 64, 16, 257])'''
         return res
-
+    def forward(self, side, front, top, cad_data, command, args):
+        
+        z = self.forward_encoder(side, front, top, cad_data, command, args)
+        res = self.forward_decoder(z,command, args)
+        return res
         
 if __name__=='__main__':
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

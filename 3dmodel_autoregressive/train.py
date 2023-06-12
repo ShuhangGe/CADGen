@@ -177,9 +177,9 @@ def main():
             train_command = command[:,:-1]
             train_paramaters = paramaters[:,:-1,:]
             tgt_commands = command[:,1:]
-            print('tgt_commands.shape: ',tgt_commands.shape)
+            #print('tgt_commands.shape: ',tgt_commands.shape)
             tgt_paramaters = paramaters[:,1:,:]
-            print('tgt_paramaters.shape: ',tgt_paramaters.shape)
+            #print('tgt_paramaters.shape: ',tgt_paramaters.shape)
             # print('train_command.shape: ',train_command.shape)
             # print('train_paramaters.shape: ',train_paramaters.shape)
             # print('tgt_commands.shape: ',tgt_commands.shape)

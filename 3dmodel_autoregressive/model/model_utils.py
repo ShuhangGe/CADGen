@@ -37,7 +37,7 @@ def _get_padding_mask(commands, seq_dim=0, extended=False):
     with torch.no_grad():
         padding_mask = (commands == EOS_IDX).cumsum(dim=seq_dim) == 0
         padding_mask = padding_mask.float()
-
+        #print('padding_mask: ',padding_mask)
         if extended:
             # padding_mask doesn't include the final EOS, extend by 1 position to include it in the loss
             S = commands.size(seq_dim)
@@ -53,11 +53,16 @@ def _get_group_mask(commands, seq_dim=0):
     Args:
         commands: Shape [S, ...]
     """
-    print('_get_group_mask: ',commands.shape)
+    #print('_get_group_mask: ',commands.shape)
+    '''_get_group_mask:  torch.Size([63, 12])'''
+    #print('commands: ',commands)
     with torch.no_grad():
         # group_mask = (commands == SOS_IDX).cumsum(dim=seq_dim)
+        #print('commands == EXT_IDX: ',(commands == EXT_IDX))
         group_mask = (commands == EXT_IDX).cumsum(dim=seq_dim)
-        print('group_mask.shape: ',group_mask.shape)
+        #print('group_mask: ',group_mask)
+        #print('group_mask.shape: ',group_mask.shape)
+        '''group_mask.shape:  torch.Size([63, 12])'''
         return group_mask
 
 
@@ -66,7 +71,7 @@ def _get_visibility_mask(commands, seq_dim=0):
     Args:
         commands: Shape [S, ...]
     """
-    print('_get_visibility_mask: ',commands.shape)
+    #print('_get_visibility_mask: ',commands.shape)
     S = commands.size(seq_dim)
     with torch.no_grad():
         visibility_mask = (commands == EOS_IDX).sum(dim=seq_dim) < S - 1
@@ -74,6 +79,8 @@ def _get_visibility_mask(commands, seq_dim=0):
         if seq_dim == 0:
             return visibility_mask.unsqueeze(-1)
         print('visibility_mask.shape: ',visibility_mask.shape)
+        '''visibility_mask.shape:  torch.Size([12])'''
+        print('visibility_mask: ',visibility_mask)
         return visibility_mask
 
 
