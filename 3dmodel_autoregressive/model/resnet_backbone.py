@@ -150,15 +150,15 @@ class ResNet18(nn.Module):
         return nn.Sequential(*layers)
     def forward(self, x):
         out = self.conv1(x)
-        print('out1.shape: ',out.shape)
+        #print('out1.shape: ',out.shape)
         out = self.conv2(out)
-        print('out2.shape: ',out.shape)
+        #print('out2.shape: ',out.shape)
         out = self.conv3(out)
-        print('out3.shape: ',out.shape)
+        #print('out3.shape: ',out.shape)
         out = self.conv4(out)
-        print('out4.shape: ',out.shape)
+        #print('out4.shape: ',out.shape)
         out = self.conv5(out)
-        print('out5.shape: ',out.shape)
+        #print('out5.shape: ',out.shape)
 
         return out
 

@@ -67,10 +67,10 @@ def main():
     # evaluate
 
     for i, data in enumerate(test_loader):
-        if i ==0:
-            continue
+        # if i ==0:
+        #     continue
         front_pic,top_pic,side_pic,cad_data,command,paramaters, data_num= data
-        Eprint('data_id: ', data_num)
+        print('data_id: ', data_num)
 
         #print('command.shape: ',command.shape)
         #print('paramaters.shape: ',paramaters.shape)
@@ -85,18 +85,14 @@ def main():
         tgt_commands = command[:,1:]
         tgt_paramaters = paramaters[:,1:,:]
         
-        command_ys = command[:,:7]
-        paramaters_ys = paramaters[:,:7,:]
-        #print('command_ys: ',command_ys)
+        command_ys = command[:,:5]
+        paramaters_ys = paramaters[:,:5,:]
         gt_vec = torch.cat([command.unsqueeze(-1), paramaters], dim=-1).squeeze(1).detach().cpu().numpy()
         # command_ys = args = torch.ones(1, 1).fill_(ALL_COMMANDS.index('SOL')). \
         #     type(torch.long).to(cfg.device)
-        # #print('command_ys.shape: ',command_ys.shape)
-        # '''command_ys.shape:  torch.Size([1, 1])'''
         # paramaters_ys = torch.ones(1, 1, N_ARGS).fill_(PAD_VAL). \
         #     type(torch.long).to(cfg.device)
-        #print('paramaters_ys.shape: ',paramaters_ys.shape)
-        '''paramaters_ys.shape:  torch.Size([1, 1, 16])'''
+            
             
         # cad_vec = torch.cat([paramaters_ys.unsqueeze(0),paramaters_ys],dim=-1)
         # pad_len = max_len - cad_vec.shape[0]
@@ -108,8 +104,6 @@ def main():
         #print('gt_vec.shape: ',gt_vec.shape)
         #commands_ = gt_vec[:, :, 0]
         z = model.forward_encoder(front_pic,top_pic,side_pic,cad_data,command_ys, paramaters_ys)
-        #print('z.shape: ',z.shape)
-        '''z.shape:  torch.Size([1, 64, 256])'''
         for j in range(max_len-1):
             with torch.no_grad():
                 with autocast():
@@ -119,15 +113,17 @@ def main():
                     # paramaters_ys = outputs['args_logits']
 
                     outputs["command_logits"]= outputs["command_logits"][:,-1,:]
-                    #print('outputs["command_logits"]: ',outputs["command_logits"])
                     outputs["args_logits"]= outputs["args_logits"][:,-1,:,:]
-                    #print('outputs["command_logits"].shape: ',outputs["command_logits"].shape,'outputs["args_logits"].shape: ',outputs["args_logits"].shape)
-                    '''outputs["command_logits"].shape:  torch.Size([1, 6]) outputs["args_logits"].shape:  torch.Size([1, 16, 257])'''
+                    #print('outputs["command_logits"].shape: ',outputs["command_logits"].shape)
+                    #print('outputs["args_logits"].shape: ',outputs["args_logits"].shape)
                     out_cad_vec = logits2vec(outputs)
                     out_cad_vec = out_cad_vec[None,:,:]
+                    #print('out_cad_vec: ',out_cad_vec)
                     #print('out_cad_vec.shape: ',out_cad_vec.shape)
                     '''out_cad_vec.shape:  (1, 1, 17)'''
-                    # print('out_cad_vec.shape: ',out_cad_vec.shape)                    
+                    # print('out_cad_vec.shape: ',out_cad_vec.shape)
+                    # print('out_command: ',out_cad_vec[:,:,0])
+                    
                     command_temp = torch.tensor(out_cad_vec[:,-1,0])
                     # print('command_temp: ',command_temp)
                     #print('command_temp.shape: ',command_temp.shape)
@@ -140,17 +136,16 @@ def main():
 
                     command_ys = torch.cat([command_ys,command_temp.unsqueeze(0)],dim=-1)
                     paramaters_ys = torch.cat([paramaters_ys,paramaters_temp.unsqueeze(0)],dim = 1)
+                    print(paramaters_ys)
+                    #print('paramaters_ys: ',paramaters_ys)
                     #print(f'command_ys.shape: {command_ys.shape}, paramaters_ys.shape: {paramaters_ys.shape}')
-                    '''command_ys.shape: torch.Size([1, 2]), paramaters_ys.shape: torch.Size([1, 2, 16])'''
                     #print('command_ys.shape: ',command_ys.shape)
                     #print('paramaters_ys.shape: ',paramaters_ys.shape)
-                    
                     break
                     if command_temp[0] == ALL_COMMANDS.index('EOS'):
                         break
-        #print('command_ys: ',command_ys)
-        
-        #print('tgt_commands: ',tgt_commands)
+        print('command_ys: ',command_ys)
+        print('tgt_commands: ',tgt_commands)
         #print('tgt_paramaters: ',tgt_paramaters)
         break
                     #torch.cat(command_ys,out_cad_vec)

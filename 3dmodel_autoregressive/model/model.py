@@ -624,6 +624,8 @@ class Views2Points(nn.Module):
         z = x_full+pos_full
         return z
     def forward_decoder(self,z,command, args):
+        command = command.clamp(0, 6)
+        args = args.clamp(-1, 255)
         text = self.text_encoder(command, args)
         #print('z.shape: ',z.shape)
         #print('text.shape: ',text.shape)
@@ -648,7 +650,7 @@ class Views2Points(nn.Module):
         }
         #print('out_logits[0].shape: ',out_logits[0].shape)
         #print('out_logits[1].shape: ',out_logits[1].shape)
-        print('\n')
+        #print('\n')
         '''out_logits[0].shape:  torch.Size([1, 64, 6])
         out_logits[1].shape:  torch.Size([1, 64, 16, 257])'''
         return res

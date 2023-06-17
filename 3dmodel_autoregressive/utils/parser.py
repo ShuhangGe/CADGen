@@ -93,7 +93,9 @@ def get_args():
     parser.add_argument('--bert_feedforward_size', type=int, default=768* 4)
     parser.add_argument('--bert_hidden_size', type=int, default=256)
 
-
+    #beam search
+    parser.add_argument('--num_beam', type=int, default=6)
+    
     #loss paramaters
     parser.add_argument('--loss_weights', type=dict, default={
             "loss_cmd_weight": 2.0,
