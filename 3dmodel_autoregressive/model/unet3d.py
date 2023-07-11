@@ -459,10 +459,14 @@ class Abstract3DUNet(nn.Module):
         encoders_features = encoders_features[1:]
 
         # decoder part
+        num = 0
         for decoder, encoder_features in zip(self.decoders, encoders_features):
             # pass the output from the corresponding encoder and the output
             # of the previous decoder
+            print('num:', num)
+            num+=1
             x = decoder(encoder_features, x)
+            print('x.shape: ',x.shape)
 
         x = self.final_conv(x)
 
@@ -529,17 +533,18 @@ if __name__ == "__main__":
     out_channels = 1
     f_maps = 32
     num_levels = 3
-    model = UNet3D(in_channels, out_channels, f_maps=f_maps, num_levels=num_levels, layer_order='cr')
+    model = ResidualUNet3D(256,3,num_levels = 3)
     print(model)
 
-    reso = 42
+    reso = 8
     
     import numpy as np
     import torch
-    x = np.zeros((1, 1, reso, reso, reso))
+    x = np.zeros((1, 256, reso, reso, reso))
     x[:,:, int(reso/2-1), int(reso/2-1), int(reso/2-1)] = np.nan
     x = torch.FloatTensor(x)
 
     out = model(x)
+    print(out.shape)
     print('%f'%(torch.sum(torch.isnan(out)).detach().cpu().numpy()/(reso*reso*reso)))
     

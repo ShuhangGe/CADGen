@@ -20,6 +20,10 @@ class CADGENdataset(data.Dataset):
     def __init__(self,cfg,test):
         self.test = test
         self.data_root= cfg.data_root
+        self.cad_root = cfg.cad_root
+        self.h5_root = cfg.cmd_root
+        self.pic_root = cfg.pic_root
+        
         self.train_lis = os.path.join(self.data_root,'train.txt')
         self.test_lis = os.path.join(self.data_root,'test.txt')
         if self.test:
@@ -31,11 +35,11 @@ class CADGENdataset(data.Dataset):
         self.file_list = []
         for line in lines:
             self.file_list.append(line.strip())
-        self.cad_root = cfg.cad_root
-        self.h5_root = cfg.cmd_root
+
         self.transforms = transforms.Compose([
             transforms.ToTensor(),
-            
+            transforms.Resize([256, 256]),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
         self.max_total_len  = MAX_TOTAL_LEN
         self.sample_points_num = cfg.npoints
@@ -54,8 +58,7 @@ class CADGENdataset(data.Dataset):
         return pc
     
     def __getitem__(self, index):
-        data_path = self.file_list[index]
-        data_num = data_path.split('/')[-1]
+        data_num = self.file_list[index]
         cad_path = os.path.join(self.cad_root, data_num+'.npy')
         #print('cad_path: ',cad_path)
         cad_data = IO.get(cad_path).astype(np.float32)
@@ -69,34 +72,28 @@ class CADGENdataset(data.Dataset):
         with h5py.File(h5_path, "r") as fp:
             cad_vec = fp["vec"][:] # (len, 1 + N_ARGS)
         #print('cad_vec: ',cad_vec)
+        #print('cad_vec.shape: ',cad_vec.shape)
         pad_len = self.max_total_len - cad_vec.shape[0]
         cad_vec = np.concatenate([cad_vec, EOS_VEC[np.newaxis].repeat(pad_len, axis=0)], axis=0)
-        np.set_printoptions(threshold=np.inf)
-        #print('cad_vec: \n',np.array(cad_vec))
-        #print('cad_vec.shape: ',cad_vec.shape)
         command = cad_vec[:, 0]
         paramaters = cad_vec[:, 1:]
+        
         command = torch.tensor(command, dtype=torch.long)
         paramaters = torch.tensor(paramaters, dtype=torch.long)
+        command = command.clamp(0,5)
+        paramaters = paramaters.clamp(-1,255)
         
-        num = data_path.split('/')[-1]
-        front_pic_path = os.path.join(data_path,num+'_f.png')
-        top_pic_path = os.path.join(data_path,num+'_t.png')
-        side_pic_path = os.path.join(data_path,num+'_r.png')
+        front_pic_path = os.path.join(self.pic_root,data_num+'_f.png')
+        top_pic_path = os.path.join(self.pic_root,data_num+'_t.png')
+        side_pic_path = os.path.join(self.pic_root,data_num+'_r.png')
         front_pic = cv2.imread(front_pic_path)
         top_pic = cv2.imread(top_pic_path)
         side_pic = cv2.imread(side_pic_path)
         front_pic = self.transforms(front_pic)
         top_pic = self.transforms(top_pic)
         side_pic = self.transforms(side_pic)
-        # print('front_pic.shape: ',front_pic.shape)
-        # print('top_pic.shape: ',top_pic.shape)
-        # print('side_pic.shape: ',side_pic.shape)
-        # print('cad_data.shape: ',cad_data.shape)
-        # print('command.shape: ',command.shape)
-        # print('paramaters.shape: ',paramaters.shape)
-        # print('data_num: ',data_num)
-        data = {'data':(front_pic,top_pic,side_pic,cad_data,command,paramaters),'id':data_num}
+
+        data = (front_pic,top_pic,side_pic,cad_data,command,paramaters, data_num)
         #print('data_num: ',data_num)
         return data
     

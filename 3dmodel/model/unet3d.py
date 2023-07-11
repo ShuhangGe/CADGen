@@ -459,10 +459,12 @@ class Abstract3DUNet(nn.Module):
         encoders_features = encoders_features[1:]
 
         # decoder part
+        
         for decoder, encoder_features in zip(self.decoders, encoders_features):
             # pass the output from the corresponding encoder and the output
             # of the previous decoder
             x = decoder(encoder_features, x)
+            
 
         x = self.final_conv(x)
 

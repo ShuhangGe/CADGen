@@ -6,6 +6,10 @@ from cadlib.macro import EOS_IDX, SOL_IDX, EXT_IDX
 from model.model_utils import _get_padding_mask, _get_visibility_mask
 import numpy as np
 
+import sys 
+sys.path.append("..") 
+from utils.check_paramaters import check_para
+
 
 # def _get_padding_mask(commands, seq_dim=0, extended=False):
 #     with torch.no_grad():
@@ -61,6 +65,7 @@ class CADLoss(nn.Module):
         #print('tgt_commands: ',tgt_commands.shape)
         #print(tgt_commands[padding_mask.bool()].reshape(-1).long())
         # loss_cmd = F.cross_entropy(command_logits[padding_mask.bool()].reshape(-1, self.n_commands), tgt_commands[padding_mask.bool()].reshape(-1).long().clamp(0, 6),ignore_index=-1)
+        #check_para('loss',padding_mask = padding_mask)
         loss_cmd = F.cross_entropy(command_logits[padding_mask.bool()].reshape(-1, self.n_commands), tgt_commands[padding_mask.bool()].reshape(-1).long())
         #print('----------------------------')
         np.set_printoptions(threshold=np.inf)

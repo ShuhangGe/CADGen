@@ -8,7 +8,7 @@ import os
 import torch
 from torch.utils.tensorboard import SummaryWriter
 from datasets.dataset import CADGENdataset
-from model.model import Views2Points
+from model.model_simple import Views2Points
 from timm.scheduler import CosineLRScheduler
 from model.loss import CADLoss
 import os
@@ -72,33 +72,22 @@ def build_opti_sche(base_model, config):
     else:
         raise NotImplementedError()
     
-    # if config.get('bnmscheduler') is not None:
-    #     bnsche_config = config.bnmscheduler
-    #     if bnsche_config.type == 'Lambda':
-    #         bnscheduler = build_lambda_bnsche(base_model, bnsche_config.kwargs)  # misc.py
-    #     scheduler = [scheduler, bnscheduler]
-    
     return optimizer, scheduler
 def main():
     # args
     args = parser.get_args()
-    #print('args: ',args)
-    #print('000000000000000000000000000000000')
     # CUDA
     args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     train_data = CADGENdataset(args,test=False)
-    #print('1111111111111111111111111111111111111111111')
     test_data = CADGENdataset(args,test=True)
     train_loader = torch.utils.data.DataLoader(train_data,
                                             batch_size=args.train_batch,
                                             shuffle=True,
                                             num_workers=args.num_workers)
-    #print('2222222222222222222222222222222222222222222222222222222')
     test_loader = torch.utils.data.DataLoader(test_data,
                                                batch_size=args.test_batch,
                                                shuffle=True,
                                                num_workers=args.num_workers)
-    #print('33333333333333333333333333333333333333333333333333')
     model = Views2Points(args)
     #print(model)
     optimizer,scheduler = build_opti_sche(model,args)
@@ -118,18 +107,15 @@ def main():
     train_num  = 0
     writer = SummaryWriter(args.log_path)
     best_test = 100000
-    #print('44444444444444444444444444444444444444444444444')
 
     for epoch in range(args.epochs):
         loss_cmd_train = 0
         loss_args_train = 0
         train_num = 0
-        #print('5555555555555555555555555555555555555555555555555')
 
         for index, data in enumerate(train_loader,0):
-            #print('000000000000000000000000000000000')
             model.train()
-            front_pic,top_pic,side_pic,cad_data,command,paramaters = data['data']
+            front_pic,top_pic,side_pic,cad_data,command,paramaters, data_num = data
             front_pic = front_pic.to(args.device)
             top_pic = top_pic.to(args.device)
             side_pic = side_pic.to(args.device)
@@ -137,14 +123,10 @@ def main():
             command = command.to(args.device)
             paramaters = paramaters.to(args.device)
             '''cad_data.shape:  torch.Size([50, 1024, 3])'''
-            #print('5555555555555555555555555555555555555555')
             with autocast():
                 output = model(front_pic,top_pic,side_pic,cad_data)
-                #print('output: ',output)
-                #print('6666666666666666666666666666666666666666')
                 output["tgt_commands"] = command
                 output["tgt_args"] = paramaters
-
                 loss_dict = loss_fun(output)
             print('len(train_loader): ',len(train_loader),'index: ',index)
             loss_cmd_train += loss_dict["loss_cmd"]
@@ -172,7 +154,7 @@ def main():
         test_num = 0
         with torch.no_grad():
             for index, data in enumerate(test_loader,0):
-                front_pic,top_pic,side_pic,cad_data,command,paramaters = data['data']
+                front_pic,top_pic,side_pic,cad_data,command,paramaters, data_num = data
                 front_pic = front_pic.to(args.device)
                 top_pic = top_pic.to(args.device)
                 side_pic = side_pic.to(args.device)
@@ -180,13 +162,11 @@ def main():
                 command = command.to(args.device)
                 paramaters = paramaters.to(args.device)
                 '''cad_data.shape:  torch.Size([50, 1024, 3])'''
-                print('---------------')
                 with autocast():
                     output_test = model(front_pic,top_pic,side_pic,cad_data)
                     #print('output: ',output)
                     output_test["tgt_commands"] = command
                     output_test["tgt_args"] = paramaters
-
                     loss_dict_test = loss_fun(output_test)
                     loss_cmd_test += loss_dict["loss_cmd"]
                     loss_args_test += loss_dict["loss_args"]
@@ -197,12 +177,11 @@ def main():
         loss_args_test = loss_args_test / test_num    
         writer.add_scalar('loss_cmd_test', loss_cmd_test, global_step=epoch)
         writer.add_scalar('loss_args_test', loss_args_test, global_step=epoch)
-
         if best_test > loss_cmd_test :
             best_test = loss_args_test
             model_save = os.path.join(args.model_path,f'CADGEN_best')
             torch.save(model.state_dict(), model_save)
-        if epoch%50==0:
+        if epoch%5==0:
             model_save = os.path.join(args.model_path,f'CADGEN_{epoch}')
             torch.save(model.state_dict(), model_save)
     model_save = os.path.join(args.model_path,f'CADGEN_latest')

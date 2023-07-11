@@ -67,8 +67,8 @@ def main():
     # evaluate
 
     for i, data in enumerate(test_loader):
-        # if i ==0:
-        #     continue
+        if i ==0:
+            continue
         front_pic,top_pic,side_pic,cad_data,command,paramaters, data_num= data
         print('data_id: ', data_num)
 

@@ -9,6 +9,7 @@ from .model_utils import _make_seq_first, _make_batch_first, \
     _get_padding_mask, _get_key_padding_mask, _get_group_mask
 from .unet3d import ResidualUNet3D
 from .resnet_backbone import ResNet50
+#from .models_ae import AutoEncoder
 
 
 import torch
@@ -256,7 +257,7 @@ class MaskTransformer(nn.Module):
         self.encoder_dims =  config.encoder_dims
         self.encoder = Encoder(encoder_channel = self.encoder_dims)
 
-        self.mask_type = config.mask_type
+        #self.mask_type = config.mask_type
 
         self.pos_embed = nn.Sequential(
             nn.Linear(3, 128),
@@ -527,102 +528,85 @@ class Views2Points(nn.Module):
     '''
     def __init__(self,config):
         super().__init__()
-        #self.img_feature =ResnetBlock(config.resnet_in,config.resnet_out,2)
         self.img_feature = ResNet50(resnet_out = int(config.resnet_out/4))
-        # self.conv3d = nn.Conv3d(in_channels=96,
-        #                 out_channels=96,
-        #                 kernel_size=(1, 1, 1),
-        #                 stride=(1, 1, 1),
-        #                 padding=0)
+
         self.unet = ResidualUNet3D(config.resnet_out*3,config.UNet_out,num_levels = 3)
         self.config = config
         self.trans_dim = config.trans_dim #384
-        self.MAE_encoder = MaskTransformer(config)
-        self.group_size = config.group_size#32
-        self.num_group = config.num_group#64
-        self.drop_path_rate = config.drop_path_rate#0.1
-        #self.mask_token = nn.Parameter(torch.zeros(1, 1, self.trans_dim))
-        self.decoder_pos_embed = nn.Sequential(
-            nn.Linear(3, 128),
-            nn.GELU(),
-            nn.Linear(128, self.trans_dim)
-        )
-
-        # self.decoder_depth = config.decoder_depth
-        # self.decoder_num_heads = config.decoder_num_heads
         
-        self.bert_decoder = Decoder(config)
-
-        #print_log(f'[Point_MAE] divide point cloud into G{self.num_group} x S{self.group_size} points ...', logger ='Point_MAE')
-        self.group_divider = Group(num_group = self.num_group, group_size = self.group_size)
+        # self.MAE_encoder = MaskTransformer(config)
+        # self.group_size = config.group_size#32
+        # self.num_group = config.num_group#64
+        # self.drop_path_rate = config.drop_path_rate#0.1
+        # self.decoder_pos_embed = nn.Sequential(
+        #     nn.Linear(3, 128),
+        #     nn.GELU(),
+        #     nn.Linear(128, self.trans_dim)
+        # )
+        # #print_log(f'[Point_MAE] divide point cloud into G{self.num_group} x S{self.group_size} points ...', logger ='Point_MAE')
+        # self.group_divider = Group(num_group = self.num_group, group_size = self.group_size)
         self.grid_sample = config.grid_sample
+        
         self.text_encoder = Text_Encoder(config)
+        self.bert_decoder = Decoder(config)
+        
     def forward_encoder(self, side, front, top, cad_data, command, args):
         autoregressive_index = command.size(1)
         log.logger.info(f'-->autoregressive_index: {autoregressive_index} \n')
-        # print('\n \n model start ')
-        # print('side.shape: ',side.shape)
-        # print('front.shape: ',front.shape)
-        # print('top.shape: ',top.shape)
-        # print('cad_data.shape: ',cad_data.shape)
-        # print('command.shape: ',command.shape)
-        # print('args.shape: ',args.shape)
-        '''side.shape:  torch.Size([1, 3, 256, 256])
-            front.shape:  torch.Size([1, 3, 256, 256])
-            top.shape:  torch.Size([1, 3, 256, 256])
-            cad_data.shape:  torch.Size([1, 1728, 3])
-            command.shape:  torch.Size([1, 64])
-            args.shape:  torch.Size([1, 64, 16])'''
+        print('\n \n model start ')
+        print('side.shape: ',side.shape)
+        print('front.shape: ',front.shape)
+        print('top.shape: ',top.shape)
+        print('cad_data.shape: ',cad_data.shape)
+        print('command.shape: ',command.shape)
+        print('args.shape: ',args.shape)
+
         side_feature = self.img_feature(side)
         front_feature = self.img_feature(front)
         top_feature = self.img_feature(top)
-        # print('side_feature.shape: ',side_feature.shape)
-        # print('front_features.shape: ',front_feature.shape)
-        # print('top_feature.shape: ',top_feature.shape)
-        '''side_feature.shape:  torch.Size([1, 32, 32, 32])
-        front_features.shape:  torch.Size([1, 32, 32, 32])
-        top_feature.shape:  torch.Size([1, 32, 32, 32])'''
+        print('side_feature.shape: ',side_feature.shape)
+        print('front_features.shape: ',front_feature.shape)
+        print('top_feature.shape: ',top_feature.shape)
+
         assert side_feature.shape[-1]==front_feature.shape[-1]==top_feature.shape[-1]==side_feature.shape[-2]==front_feature.shape[-2]==top_feature.shape[-2]
         repeat_num = side_feature.shape[-1]
         side_3d = side_feature.unsqueeze(-3).repeat(1,1,repeat_num,1,1)
         front_3d = front_feature.unsqueeze(-2).repeat(1,1,1,repeat_num,1)
         top_3d = top_feature.unsqueeze(-1).repeat(1,1,1,1,repeat_num)
-        # print('side_3d.shape: ',side_3d.shape)
-        # print('front_3d.shape: ',front_3d.shape)
-        # print('top_3d.shape: ',top_3d.shape)
-        '''side_3d.shape:  torch.Size([1, 32, 32, 32, 32])
-        front_3d.shape:  torch.Size([1, 32, 32, 32, 32])
-        top_3d.shape:  torch.Size([1, 32, 32, 32, 32])'''
+        print('side_3d.shape: ',side_3d.shape)
+        print('front_3d.shape: ',front_3d.shape)
+        print('top_3d.shape: ',top_3d.shape)
+
         feature_3d = torch.cat((side_3d,front_3d,top_3d),dim=1)
-        #print('feature_3d1.shape: ',feature_3d.shape)
-        '''feature_3d1.shape:  torch.Size([1, 96, 32, 32, 32])'''
+        print('feature_3d1.shape: ',feature_3d.shape)
         feature_3d = self.unet(feature_3d)
         feature_3d = feature_3d.float()
-        #print('feature_3d.shape: ',feature_3d.shape)
-        '''feature_3d.shape:  torch.Size([1, 3, 32, 32, 32])'''
+        print('feature_3d.shape: ',feature_3d.shape)
 
         data = F.grid_sample(feature_3d, cad_data.view(-1,self.grid_sample,self.grid_sample,self.grid_sample,3), mode='bilinear', padding_mode='zeros', align_corners=None)
-        #print('data1.shape: ',data.shape)
-        '''data1.shape:  torch.Size([1, 3, 12, 12, 12])'''
+        print('data1.shape: ',data.shape)
         data = data.view(data.shape[0],data.shape[1],-1).permute(0,2,1)
         #print('data2.shape: ',data.shape)
-        '''data2.shape:  torch.Size([1, 1728, 3])'''
-        neighborhood, center = self.group_divider(cad_data,data)
-        #print('neighborhood.shape:',neighborhood.shape)
-        #print('center.shape:',center.shape)
-        '''neighborhood.shape: torch.Size([1, 64, 27, 3])
-        center.shape: torch.Size([1, 64, 3])'''
-        neighborhood = data.view(data.shape[0],self.num_group,self.group_size,3)
-        x_full= self.MAE_encoder(neighborhood, center)
-        #print('x_full[0]: ',x_full[0])
-        #print('x_full.shape: ',x_full.shape)
-        '''x_full.shape:  torch.Size([1, 64, 256])'''
-        B,_,C = x_full.shape # B VIS C
-        pos_full = self.decoder_pos_embed(center).reshape(B, -1, C)
-        #print('pos_full.shape: ',pos_full.shape)
-        '''pos_full.shape:  torch.Size([1, 64, 256])'''
-        z = x_full+pos_full
-        return z
+        
+        # #use mae encoder
+        # neighborhood, center = self.group_divider(cad_data,data)
+        # #print('neighborhood.shape:',neighborhood.shape)
+        # #print('center.shape:',center.shape)
+        # '''neighborhood.shape: torch.Size([1, 64, 27, 3])
+        # center.shape: torch.Size([1, 64, 3])'''
+        # neighborhood = data.view(data.shape[0],self.num_group,self.group_size,3)
+        # x_full= self.MAE_encoder(neighborhood, center)
+        # #print('x_full[0]: ',x_full[0])
+        # #print('x_full.shape: ',x_full.shape)
+        # '''x_full.shape:  torch.Size([1, 64, 256])'''
+        # B,_,C = x_full.shape # B VIS C
+        # pos_full = self.decoder_pos_embed(center).reshape(B, -1, C)
+        # #print('pos_full.shape: ',pos_full.shape)
+        # '''pos_full.shape:  torch.Size([1, 64, 256])'''
+        # z = x_full+pos_full
+        # #z = self.attention_encode(data)
+        
+        return data
     def forward_decoder(self,z,command, args):
         command = command.clamp(0, 6)
         args = args.clamp(-1, 255)

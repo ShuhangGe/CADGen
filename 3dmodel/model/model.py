@@ -186,38 +186,6 @@ class TransformerEncoder(nn.Module):
         return x
 
 
-# class TransformerDecoder(nn.Module):
-#     def __init__(self, embed_dim=384, depth=4, num_heads=6, mlp_ratio=4., qkv_bias=False, qk_scale=None,
-#                  drop_rate=0., attn_drop_rate=0., drop_path_rate=0.1, norm_layer=nn.LayerNorm):
-#         super().__init__()
-#         self.blocks = nn.ModuleList([
-#             Block(
-#                 dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
-#                 drop=drop_rate, attn_drop=attn_drop_rate,
-#                 drop_path=drop_path_rate[i] if isinstance(drop_path_rate, list) else drop_path_rate
-#             )
-#             for i in range(depth)])
-#         self.norm = norm_layer(embed_dim)
-#         self.head = nn.Identity()
-
-#         self.apply(self._init_weights)
-
-#     def _init_weights(self, m):
-#         if isinstance(m, nn.Linear):
-#             nn.init.xavier_uniform_(m.weight)
-#             if isinstance(m, nn.Linear) and m.bias is not None:
-#                 nn.init.constant_(m.bias, 0)
-#         elif isinstance(m, nn.LayerNorm):
-#             nn.init.constant_(m.bias, 0)
-#             nn.init.constant_(m.weight, 1.0)
-
-#     def forward(self, x, pos, return_token_num):
-#         for _, block in enumerate(self.blocks):
-#             x = block(x + pos)
-
-#         x = self.head(self.norm(x[:, -return_token_num:]))  # only return the mask tokens predict pixel
-#         return x
-# Pretrain model
 class MaskTransformer(nn.Module):
     def __init__(self, config, **kwargs):
         super().__init__()
@@ -482,6 +450,7 @@ class Bottleneck(nn.Module):
                                         nn.Tanh())
 
     def forward(self, z):
+        print('z.shape: ',z.shape)
         return self.bottleneck(z)
 
 class Decoder(nn.Module):
@@ -525,78 +494,6 @@ class Decoder(nn.Module):
 '''
 
 
-class UNet(nn.Module):
-    def __init__(self, in_channel=96, out_channel=2, training=True):
-        super(UNet, self).__init__()
-        self.training = training
-        self.encoder1 = nn.Conv3d(in_channel, 32, 3, stride=1, padding=1)  # b, 16, 10, 10
-        self.encoder2=   nn.Conv3d(32, 64, 3, stride=1, padding=1)  # b, 8, 3, 3
-        self.encoder3=   nn.Conv3d(64, 128, 3, stride=1, padding=1)
-        self.encoder4=   nn.Conv3d(128, 256, 3, stride=1, padding=1)
-        # self.encoder5=   nn.Conv3d(256, 512, 3, stride=1, padding=1)
-        
-        # self.decoder1 = nn.Conv3d(512, 256, 3, stride=1,padding=1)  # b, 16, 5, 5
-        self.decoder2 =   nn.Conv3d(256, 128, 3, stride=1, padding=1)  # b, 8, 15, 1
-        self.decoder3 =   nn.Conv3d(128, 64, 3, stride=1, padding=1)  # b, 1, 28, 28
-        self.decoder4 =   nn.Conv3d(64, 32, 3, stride=1, padding=1)
-        self.decoder5 =   nn.Conv3d(32, 2, 3, stride=1, padding=1)
-        
-        self.map4 = nn.Sequential(
-            nn.Conv3d(2, out_channel, 1, 1),
-            #nn.Upsample(scale_factor=(1, 2, 2), mode='trilinear'),
-            nn.Softmax(dim =1)
-        )
-
-        self.map3 = nn.Sequential(
-            nn.Conv3d(64, out_channel, 1, 1),
-            nn.Upsample(scale_factor=(4, 8, 8), mode='trilinear'),
-            nn.Softmax(dim =1)
-        )
-        self.map2 = nn.Sequential(
-            nn.Conv3d(128, out_channel, 1, 1),
-            nn.Upsample(scale_factor=(8, 16, 16), mode='trilinear'),
-            nn.Softmax(dim =1)
-        )
-
-        self.map1 = nn.Sequential(
-            nn.Conv3d(256, out_channel, 1, 1),
-            nn.Upsample(scale_factor=(16, 32, 32), mode='trilinear'),
-            nn.Softmax(dim =1)
-        )
-        self.padding = torch.nn.ReplicationPad3d((1, 0, 1, 0, 1, 0))
-
-    def forward(self, x):
-
-        out = F.relu(F.max_pool3d(self.encoder1(x),2,2))
-        t1 = out
-        out = F.relu(F.max_pool3d(self.encoder2(out),2,2))
-        t2 = out
-        
-        out = F.relu(F.max_pool3d(self.encoder3(out),2,2))
-        t3 = out
-        out = F.relu(F.max_pool3d(self.encoder4(out),2,2))
-        #output1 = self.map1(out)
-        out = F.relu(F.interpolate(self.decoder2(out),scale_factor=(2,2,2),mode ='trilinear'))
-        out = torch.add(out,t3)
-        #output2 = self.map2(out)
-        #print('out1.shape: ',out.shape)
-        out = F.relu(F.interpolate(self.decoder3(out),scale_factor=(2,2,2),mode ='trilinear'))
-        #print('out2.shape: ',out.shape)
-        #print('t2.shape: ',t2.shape)
-        if out.shape[-1] !=t2.shape[-1]:
-            out = self.padding(out)
-            print('out3.shape: ',out.shape)
-        out = torch.add(out,t2)
-        #output3 = self.map3(out)
-        out = F.relu(F.interpolate(self.decoder4(out),scale_factor=(2,2,2),mode ='trilinear'))
-        out = torch.add(out,t1)
-        #print('out1.shape: ',out.shape)
-        out = F.relu(F.interpolate(self.decoder5(out),scale_factor=(2,2,2),mode ='trilinear'))
-        #print('out2.shape: ',out.shape)
-        output4 = self.map4(out)
-        #print('output4.shape: ',output4.shape)
-        return output4
-
 
 @MODELS.register_module()
 class Views2Points(nn.Module):
@@ -612,7 +509,7 @@ class Views2Points(nn.Module):
                         kernel_size=(1, 1, 1),
                         stride=(1, 1, 1),
                         padding=0)
-        self.unet = UNet(in_channel=config.resnet_out*3,out_channel=config.UNet_out)
+        self.unet = ResidualUNet3D(config.resnet_out*3,config.UNet_out,num_levels = 3)
         self.config = config
         self.trans_dim = config.trans_dim #384
         self.MAE_encoder = MaskTransformer(config)
@@ -655,7 +552,7 @@ class Views2Points(nn.Module):
         #print('side_3d.shape: ',side_3d.shape)
         #print('front_3d.shape: ',front_3d.shape)
         #print('top_3d.shape: ',top_3d.shape)
-        feature_3d = torch.concat((side_3d,front_3d,top_3d),dim=1)
+        feature_3d = torch.cat((side_3d,front_3d,top_3d),dim=1)
         #print('feature_3d1.shape: ',feature_3d.shape)
         feature_3d = self.unet(feature_3d)
         #print('feature_3d2.shape: ',feature_3d.shape)
@@ -663,7 +560,7 @@ class Views2Points(nn.Module):
         feature_3d1.shape:  torch.Size([1, 96, 64, 64, 64])
         feature_3d2.shape:  torch.Size([1, 32, 64, 64, 64])'''
         '''cad_data.shape:  torch.Size([50, 1024, 3])'''
-
+        feature_3d = feature_3d.float()
         # #outp = F.grid_sample(feature_3d,cad_data)
         # for j in range(feature_3d.shape[0]):
         #     for i in range(cad_data.shape[1]):
@@ -692,12 +589,12 @@ class Views2Points(nn.Module):
         '''center.shape: torch.Size([50, 32, 3])'''
         neighborhood = data.view(data.shape[0],self.num_group,self.group_size,3)
         x_full= self.MAE_encoder(neighborhood, center)
-        #print('x_full.shape: ',x_full.shape)
+        print('x_full.shape: ',x_full.shape)
         '''x_full.shape:  torch.Size([50, 32, 128])'''
         B,_,C = x_full.shape # B VIS C
 
         pos_full = self.decoder_pos_embed(center).reshape(B, -1, C)
-        #print('pos_full.shape: ',pos_full.shape)
+        print('pos_full.shape: ',pos_full.shape)
         '''pos_full.shape:  torch.Size([50, 32, 128])'''
         z = x_full+pos_full
         output = self.MAE_decoder(z)

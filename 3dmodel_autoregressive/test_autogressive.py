@@ -45,7 +45,7 @@ def main():
     model = Views2Points(cfg)
     cfg.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # load from checkpoint if provided
-    model_path = '/scratch/sg7484/CMDGen/results/train_1e-6_fulldata_autoregressive_nomask/model/CADGEN_3'
+    model_path = '/scratch/sg7484/CMDGen/results/train_1e-7_fulldata_autoregressive/model/CADGEN_5'
     model_par = torch.load(model_path)
     model.load_state_dict(model_par)
     model = model.to(cfg.device)
@@ -67,10 +67,10 @@ def main():
     # evaluate
 
     for i, data in enumerate(test_loader):
-        if i ==0:
-            continue
+        # if i ==0:
+        #     continue
         front_pic,top_pic,side_pic,cad_data,command,paramaters, data_num= data
-        Eprint('data_id: ', data_num)
+        print('data_id: ', data_num)
 
         #print('command.shape: ',command.shape)
         #print('paramaters.shape: ',paramaters.shape)
@@ -85,16 +85,16 @@ def main():
         tgt_commands = command[:,1:]
         tgt_paramaters = paramaters[:,1:,:]
         
-        command_ys = command[:,:7]
-        paramaters_ys = paramaters[:,:7,:]
+        # command_ys = command[:,:2]
+        # paramaters_ys = paramaters[:,:2,:]
         #print('command_ys: ',command_ys)
         gt_vec = torch.cat([command.unsqueeze(-1), paramaters], dim=-1).squeeze(1).detach().cpu().numpy()
-        # command_ys = args = torch.ones(1, 1).fill_(ALL_COMMANDS.index('SOL')). \
-        #     type(torch.long).to(cfg.device)
-        # #print('command_ys.shape: ',command_ys.shape)
-        # '''command_ys.shape:  torch.Size([1, 1])'''
-        # paramaters_ys = torch.ones(1, 1, N_ARGS).fill_(PAD_VAL). \
-        #     type(torch.long).to(cfg.device)
+        command_ys = args = torch.ones(1, 1).fill_(ALL_COMMANDS.index('SOL')). \
+            type(torch.long).to(cfg.device)
+        #print('command_ys.shape: ',command_ys.shape)
+        '''command_ys.shape:  torch.Size([1, 1])'''
+        paramaters_ys = torch.ones(1, 1, N_ARGS).fill_(PAD_VAL). \
+            type(torch.long).to(cfg.device)
         #print('paramaters_ys.shape: ',paramaters_ys.shape)
         '''paramaters_ys.shape:  torch.Size([1, 1, 16])'''
             
@@ -145,14 +145,15 @@ def main():
                     #print('command_ys.shape: ',command_ys.shape)
                     #print('paramaters_ys.shape: ',paramaters_ys.shape)
                     
-                    break
-                    if command_temp[0] == ALL_COMMANDS.index('EOS'):
-                        break
-        #print('command_ys: ',command_ys)
+                    
+                    # if command_temp[0] == ALL_COMMANDS.index('EOS'):
+                    #     break
+        print('tgt_commands: ',tgt_commands)
+        print('command_ys: ',command_ys)
+        ##print('tgt_paramaters: ',tgt_paramaters)
+        #print('paramaters_ys: ',paramaters_ys)
         
-        #print('tgt_commands: ',tgt_commands)
-        #print('tgt_paramaters: ',tgt_paramaters)
-        break
+        #break
                     #torch.cat(command_ys,out_cad_vec)
 #                     '''out_logits[0].shape:  torch.Size([1, 64, 6])
 #                     out_logits[1].shape:  torch.Size([1, 64, 16, 257])'''
@@ -179,3 +180,14 @@ if __name__=='__main__':
     # top = torch.full((1,3,200,200),255).to(device)
     # cad_data = torch.rand(1, 1024, 3).to(device)
     main()
+    
+    
+    
+#padding
+'''tgt_commands:  tensor([[0, 0, 0, 0, 4, 2, 5, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+         3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+         3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]], device='cuda:0')
+command_ys:  tensor([[4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], device='cuda:0')'''
+         

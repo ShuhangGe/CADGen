@@ -161,6 +161,7 @@ def main():
         loss_cmd_train = 0
         loss_args_train = 0
         train_num = 0
+        loss_sum = 0
         #print('5555555555555555555555555555555555555555555555555')
         for index, data in enumerate(train_loader,0):
             #print('000000000000000000000000000000000')
@@ -204,11 +205,16 @@ def main():
             #print('sum(loss_dict.values()): ',sum(loss_dict.values()))
             #print('loss_dict.values(): ',loss_dict.values())
             loss = sum(loss_dict.values())
-            optimizer.zero_grad()
             print('loss: ',loss)
+            loss_sum = loss_sum +loss
+            print('loss_cmd_train: ',loss_dict["loss_cmd"], 'loss_args_train: ',loss_dict["loss_args"])
+            assert torch.isnan(loss).sum() == 0, print('loss: ',loss)
+            
+            optimizer.zero_grad()
             # with torch.autograd.detect_anomaly():
             loss.backward()
-            
+            torch.nn.utils.clip_grad_norm(model.parameters(), max_norm=20, norm_type=2)
+
             #logname = '/scratch/sg7484/CMDGen/results/paramaters' + f'/log_{index}.log'
             #log = Logger(logname,level='debug')
 
@@ -219,11 +225,14 @@ def main():
             #torch.save(model.state_dict(), f'/scratch/sg7484/CMDGen/results/paramaters/paramater_{index}')
             optimizer.step()
             #torch.save(model.state_dict(), f'/scratch/sg7484/CMDGen/results/paramaters/paramater_after_{index}')
-            
+       
         loss_cmd_train = loss_cmd_train/train_num
-        loss_args_train = loss_args_train/train_num     
+        loss_args_train = loss_args_train/train_num
+        loss_sum = loss_sum/train_num     
+        print('loss_train_sum: ',loss_sum)
         writer.add_scalar('loss_cmd_train', loss_cmd_train, global_step=epoch)
         writer.add_scalar('loss_args_train', loss_args_train, global_step=epoch)
+        writer.add_scalar('loss_sum', loss_sum, global_step=epoch)
         if isinstance(scheduler, list):
             for item in scheduler:
                 item.step(epoch)
@@ -231,7 +240,8 @@ def main():
             scheduler.step(epoch)
         loss_cmd_test = 0
         loss_args_test = 0
-        test_num = 0
+        test_num = 1e-9
+        loss_test_sum = 0
         with torch.no_grad():
             for index, data in enumerate(test_loader,0):
                 front_pic,top_pic,side_pic,cad_data,command,paramaters,data_num = data
@@ -248,7 +258,7 @@ def main():
                 tgt_commands = command[:,1:]
                 tgt_paramaters = paramaters[:,1:,:]
                 '''cad_data.shape:  torch.Size([50, 1024, 3])'''
-                print('---------------')
+                #print('---------------')
                 with autocast():
                     output_test = model(front_pic,top_pic,side_pic,cad_data,train_command,train_paramaters)
                     #print('output: ',output)
@@ -260,23 +270,26 @@ def main():
                     loss_args_test += loss_dict["loss_args"]
                     loss_test = sum(loss_dict_test.values())
                 #with autocast():
-                    
+                loss_test_sum += loss_test
                     
                 test_num += 1
-                print('loss_test: ',loss_test)
-        loss_cmd_test = loss_cmd_test / test_num  
-        loss_args_test = loss_args_test / test_num    
+                assert torch.isnan(loss_test).sum() == 0, print('loss_test: ',loss_test)
+        loss_cmd_test = loss_cmd_test / test_num
+        loss_args_test = loss_args_test / test_num
+  
+        loss_test_sum = loss_test_sum / test_num    
         writer.add_scalar('loss_cmd_test', loss_cmd_test, global_step=epoch)
         writer.add_scalar('loss_args_test', loss_args_test, global_step=epoch)
-
+        writer.add_scalar('loss_test_sum', loss_test_sum, global_step=epoch)
+        print('loss_test_sum: ',loss_test_sum)
         if best_test > loss_cmd_test :
             best_test = loss_args_test
-            model_save = os.path.join(args.model_path,f'CADGEN_best')
+            model_save = os.path.join(args.model_path,f'CADGEN_best_train_{loss_sum}_test_{loss_test_sum}')
             torch.save(model.state_dict(), model_save)
         if epoch%1==0:
-            model_save = os.path.join(args.model_path,f'CADGEN_{epoch}')
+            model_save = os.path.join(args.model_path,f'CADGEN_{epoch}_train_{loss_sum}_test_{loss_test_sum}')
             torch.save(model.state_dict(), model_save)
-    model_save = os.path.join(args.model_path,f'CADGEN_latest')
+    model_save = os.path.join(args.model_path,f'CADGEN_latest_train_{loss_sum}_test_{loss_test_sum}')
     torch.save(model.state_dict(), model_save)
 if __name__ == '__main__':
     os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
