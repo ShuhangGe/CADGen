@@ -188,7 +188,7 @@ class ResNet18(nn.Module):
         print('out4.shape: ',out.shape)
         out = self.conv5(out)
         print('out5.shape: ',out.shape)
-        out = self.avgpool(out)
+        #out = self.avgpool(out)
         
         print('out6.shape: ',out.shape)
 

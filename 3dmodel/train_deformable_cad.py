@@ -7,8 +7,8 @@ import time
 import os
 import torch
 from torch.utils.tensorboard import SummaryWriter
-from datasets.dataset import CADGENdataset
-from model.model_deformerable import Views2Points
+from datasets.dataset_cad import CADGENdataset
+from model.model_deformerable_cad import Views2Points
 from timm.scheduler import CosineLRScheduler
 from model.loss import CADLoss
 import os
@@ -130,16 +130,13 @@ def main():
         loss_sum = 0
         for index, data in enumerate(train_loader,0):
             model.train()
-            front_pic,top_pic,side_pic,cad_data,command,paramaters, data_num = data
-            front_pic = front_pic.to(args.device)
-            top_pic = top_pic.to(args.device)
-            side_pic = side_pic.to(args.device)
+            cad_data,command,paramaters, data_num = data
             cad_data = cad_data.to(args.device)
             command = command.to(args.device)
             paramaters = paramaters.to(args.device)
             '''cad_data.shape:  torch.Size([50, 1024, 3])'''
             with autocast():
-                output = model(front_pic,top_pic,side_pic,cad_data)
+                output = model(cad_data)
                 output["tgt_commands"] = command
                 output["tgt_args"] = paramaters
                 loss_dict = loss_fun(output)
@@ -173,16 +170,13 @@ def main():
         loss_test_sum = 0
         with torch.no_grad():
             for index, data in enumerate(test_loader,0):
-                front_pic,top_pic,side_pic,cad_data,command,paramaters, data_num = data
-                front_pic = front_pic.to(args.device)
-                top_pic = top_pic.to(args.device)
-                side_pic = side_pic.to(args.device)
+                cad_data,command,paramaters, data_num = data
                 cad_data = cad_data.to(args.device)
                 command = command.to(args.device)
                 paramaters = paramaters.to(args.device)
                 '''cad_data.shape:  torch.Size([50, 1024, 3])'''
                 with autocast():
-                    output_test = model(front_pic,top_pic,side_pic,cad_data)
+                    output_test = model(cad_data)
                     #print('output: ',output)
                     output_test["tgt_commands"] = command
                     output_test["tgt_args"] = paramaters

@@ -31,10 +31,11 @@ def get_args():
     parser.add_argument('--save_path', type=str, default='../results/exp1')
     parser.add_argument('--log_path', type=str)
     parser.add_argument('--model_path', type=str)
+    parser.add_argument('--retrain_model', type=str)
     parser.add_argument('--num_workers', type=int, default=1)
     parser.add_argument('--n_points', type=int, default=10000)
     parser.add_argument('--npoints', type=int, default=1536)
-    parser.add_argument('--grid_sample', type=int, default=12)# sqt(npoints,3)
+    parser.add_argument('--grid_sample', type=int, default=8)# sqt(npoints,3)
     parser.add_argument('--optimizer', type=dict, default={ 'type': 'AdamW',
                                                     'kwargs': {
                                                     'lr' : 0.001,
@@ -47,20 +48,20 @@ def get_args():
                                                             }})
 
     #test
-    parser.add_argument('--test_outputs', type=str, default='../results/out')
+    parser.add_argument('--test_outputs', type=str, default='../results/commands_out')
     
     #encoder paramaters
     parser.add_argument('--NAME', type=str, default='Point_MAE')
-    parser.add_argument('--group_size', type=int, default=25)
+    parser.add_argument('--group_size', type=int, default=3)
     #group_size^num_group = npoints
     parser.add_argument('--mask_ratio', type=float, default=0.6)
     parser.add_argument('--mask_type', type=str, default='rand')
-    parser.add_argument('--num_group', type=int, default=40)#64
+    parser.add_argument('--num_group', type=int, default=512)#64
     parser.add_argument('--num_heads', type=int, default=4)#6
     parser.add_argument('--trans_dim', type=int, default=256)#384
     '''num_group*num_heads = trans_dim'''
     parser.add_argument('--encoder_dims', type=int, default=256)#384
-    parser.add_argument('--depth', type=int, default=12)
+    parser.add_argument('--depth', type=int, default=6)#12encoder depth
     parser.add_argument('--drop_path_rate', type=float, default=0.1)
     parser.add_argument('--decoder_depth', type=int, default=4)
     parser.add_argument('--decoder_num_heads', type=int, default=6)
@@ -98,7 +99,7 @@ def get_args():
     parser.add_argument('--scales_deformable', type=int, default=3)
     parser.add_argument('--last_point_num', type=int, default=64)
     parser.add_argument('--dim_feedforward_deformable', type=int, default=2048)
-    parser.add_argument('--num_decoder_layers_deformable', type=int, default=6)
+    parser.add_argument('--num_decoder_layers_deformable', type=int, default=8)
     parser.add_argument('--num_queries', type=int, default=64)
     #loss paramaters
     parser.add_argument('--loss_weights', type=dict, default={

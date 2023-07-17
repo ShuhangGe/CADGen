@@ -17,7 +17,7 @@ from .model_utils import _make_seq_first, _make_batch_first, \
     _get_padding_mask, _get_key_padding_mask, _get_group_mask
     
 from .unet3d import ResidualUNet3D
-from .resnet_backbone import ResNet18
+from .resnet_backbone import ResNet50
 from typing import Optional, List
 
 import logging
@@ -507,7 +507,7 @@ class Views2Points(nn.Module):
     '''
     def __init__(self,config):
         super().__init__()
-        self.img_feature = ResNet18(resnet_out = int(config.resnet_out))
+        self.img_feature = ResNet50(resnet_out = int(config.resnet_out/4))
         self.unet = ResidualUNet3D(config.resnet_out*3,config.UNet_out,num_levels = 4)
         self.config = config
         self.grid_sample = config.grid_sample
@@ -537,21 +537,16 @@ class Views2Points(nn.Module):
 
     def forward(self,side,front,top,cad_data):
         # print('model start ')
-        print('side.shape: ',side.shape)
-        print('front.shape: ',front.shape)
-        print('top.shape: ',top.shape)
-        print('cad_data.shape: ',cad_data.shape)
-        '''side.shape:  torch.Size([90, 3, 256, 256])
-            front.shape:  torch.Size([90, 3, 256, 256])
-            top.shape:  torch.Size([90, 3, 256, 256])
-            cad_data.shape:  torch.Size([90, 1536, 3])'''
+        # print('side.shape: ',side.shape)
+        # print('front.shape: ',front.shape)
+        # print('top.shape: ',top.shape)
+        # print('cad_data.shape: ',cad_data.shape)
         side_feature = self.img_feature(side)
         front_feature = self.img_feature(front)
         top_feature = self.img_feature(top)
         #print('side_feature.shape: ',side_feature.shape)
         #print('front_features.shape: ',front_feature.shape)
-        #print('top_feature.shape: ',top_feature.shape)
-        '''top_feature.shape:  torch.Size([90, 32, 8, 8])'''
+        print('top_feature.shape: ',top_feature.shape)
         assert side_feature.shape[-1]==front_feature.shape[-1]==top_feature.shape[-1]==side_feature.shape[-2]==front_feature.shape[-2]==top_feature.shape[-2]
         repeat_num = side_feature.shape[-1]
         side_3d = side_feature.unsqueeze(-3).repeat(1,1,repeat_num,1,1)
@@ -560,20 +555,14 @@ class Views2Points(nn.Module):
         print('side_3d.shape: ',side_3d.shape)
         print('front_3d.shape: ',front_3d.shape)
         print('top_3d.shape: ',top_3d.shape)
-        '''side_3d.shape:  torch.Size([90, 32, 8, 8, 8])
-            front_3d.shape:  torch.Size([90, 32, 8, 8, 8])
-            top_3d.shape:  torch.Size([90, 32, 8, 8, 8])'''
         feature_3d = torch.cat((side_3d,front_3d,top_3d),dim=1)
         print('feature_3d1.shape: ',feature_3d.shape)
-        '''feature_3d1.shape:  torch.Size([90, 96, 8, 8, 8])'''
         feature_3d = self.unet(feature_3d)
         print('feature_3d2.shape: ',feature_3d.shape)
-        '''feature_3d2.shape:  torch.Size([90, 256, 8, 8, 8])'''
         
         feature_3d = feature_3d.float()
         feature_3d = feature_3d.permute(0,2,3,4,1)
         print('feature_3d2.shape: ',feature_3d.shape)
-        '''feature_3d2.shape:  torch.Size([90, 8, 8, 8, 256])'''
         decoder_features = [feature_3d for _ in range(self.config.scales_deformable)]
         check_para('model_deformerable',decoder_features = decoder_features)
         # data = F.grid_sample(feature_3d, cad_data.view(-1,self.grid_sample,self.grid_sample,self.grid_sample,-1), mode='bilinear', padding_mode='zeros', align_corners=None)
@@ -587,8 +576,6 @@ class Views2Points(nn.Module):
         output = self.decoder(tgt,decoder_features,query_ref_point,query_pos=query_embed)
         #check_para('model_deformerable',output=output)
         command_logits, args_logits = self.fcn(output)
-        # print('command_logits: ',command_logits)
-        # print('args_logits: ',args_logits)
         output = (command_logits, args_logits)
         out_logits = _make_batch_first(*output)
         #check_para('model_deformerable',out_logits0=out_logits[0])

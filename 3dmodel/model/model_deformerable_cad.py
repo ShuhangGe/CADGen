@@ -12,6 +12,8 @@ from utils import misc
 from utils.checkpoint import get_missing_parameters_message, get_unexpected_parameters_message
 from utils.logger import *
 import random
+from knn_cuda import KNN
+
 #from extensions.chamfer_dist import ChamferDistanceL1, ChamferDistanceL2
 from .model_utils import _make_seq_first, _make_batch_first, \
     _get_padding_mask, _get_key_padding_mask, _get_group_mask
@@ -37,6 +39,7 @@ from .build import MODELS
 from .unet3d import ResidualUNet3D
 from utils.check_paramaters import check_para
 from .deformable_attn_3d import DeformableHeadAttention
+
 class Encoder(nn.Module):   ## Embedding module
     def __init__(self, encoder_channel):
         super().__init__()
@@ -512,7 +515,23 @@ class Views2Points(nn.Module):
         self.config = config
         self.grid_sample = config.grid_sample
         
-        #deocder
+        # encoder
+        self.trans_dim = config.trans_dim #384
+        self.MAE_encoder = MaskTransformer(config)
+        self.group_size = config.group_size#32
+        self.num_group = config.num_group#64
+        self.drop_path_rate = config.drop_path_rate#0.1
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, self.trans_dim))
+        self.decoder_pos_embed = nn.Sequential(
+            nn.Linear(3, 128),
+            nn.GELU(),
+            nn.Linear(128, self.trans_dim)
+        )
+
+        #print_log(f'[Point_MAE] divide point cloud into G{self.num_group} x S{self.group_size} points ...', logger ='Point_MAE')
+        self.group_divider = Group(num_group = self.num_group, group_size = self.group_size)
+        
+        # deocder
         hidden_dim = config.d_model_deformable
         self.query_embed = nn.Embedding(config.num_queries, hidden_dim)
         self.query_embed  = self.query_embed.weight
@@ -535,51 +554,27 @@ class Views2Points(nn.Module):
         self.fcn = FCN(config.d_model, config.n_commands, config.n_args, args_dim)
         #print_log(f'[Point_MAE] divide point cloud into G{self.num_group} x S{self.group_size} points ...', logger ='Point_MAE')
 
-    def forward(self,side,front,top,cad_data):
-        # print('model start ')
-        print('side.shape: ',side.shape)
-        print('front.shape: ',front.shape)
-        print('top.shape: ',top.shape)
+    def forward(self,cad_data):
         print('cad_data.shape: ',cad_data.shape)
-        '''side.shape:  torch.Size([90, 3, 256, 256])
-            front.shape:  torch.Size([90, 3, 256, 256])
-            top.shape:  torch.Size([90, 3, 256, 256])
-            cad_data.shape:  torch.Size([90, 1536, 3])'''
-        side_feature = self.img_feature(side)
-        front_feature = self.img_feature(front)
-        top_feature = self.img_feature(top)
-        #print('side_feature.shape: ',side_feature.shape)
-        #print('front_features.shape: ',front_feature.shape)
-        #print('top_feature.shape: ',top_feature.shape)
-        '''top_feature.shape:  torch.Size([90, 32, 8, 8])'''
-        assert side_feature.shape[-1]==front_feature.shape[-1]==top_feature.shape[-1]==side_feature.shape[-2]==front_feature.shape[-2]==top_feature.shape[-2]
-        repeat_num = side_feature.shape[-1]
-        side_3d = side_feature.unsqueeze(-3).repeat(1,1,repeat_num,1,1)
-        front_3d = front_feature.unsqueeze(-2).repeat(1,1,1,repeat_num,1)
-        top_3d = top_feature.unsqueeze(-1).repeat(1,1,1,1,repeat_num)
-        print('side_3d.shape: ',side_3d.shape)
-        print('front_3d.shape: ',front_3d.shape)
-        print('top_3d.shape: ',top_3d.shape)
-        '''side_3d.shape:  torch.Size([90, 32, 8, 8, 8])
-            front_3d.shape:  torch.Size([90, 32, 8, 8, 8])
-            top_3d.shape:  torch.Size([90, 32, 8, 8, 8])'''
-        feature_3d = torch.cat((side_3d,front_3d,top_3d),dim=1)
-        print('feature_3d1.shape: ',feature_3d.shape)
-        '''feature_3d1.shape:  torch.Size([90, 96, 8, 8, 8])'''
-        feature_3d = self.unet(feature_3d)
+        neighborhood, center = self.group_divider(cad_data)
+        print('neighborhood.shape: ',neighborhood.shape)
+        print('center.shape: ',center.shape)
+        x_full= self.MAE_encoder(neighborhood, center)
+        print('x_full.shape: ',x_full.shape)
+        B,_,C = x_full.shape # B VIS C
+        pos_full = self.decoder_pos_embed(center).reshape(B, -1, C)
+        print('pos_full.shape: ',pos_full.shape)
+        feature_3d = x_full+pos_full
+        bs = feature_3d.size(0)
+        print('feature_3d.shape: ',feature_3d.shape)
+        feature_3d = feature_3d.view(bs,self.grid_sample,self.grid_sample,self.grid_sample,-1)
         print('feature_3d2.shape: ',feature_3d.shape)
-        '''feature_3d2.shape:  torch.Size([90, 256, 8, 8, 8])'''
-        
-        feature_3d = feature_3d.float()
-        feature_3d = feature_3d.permute(0,2,3,4,1)
-        print('feature_3d2.shape: ',feature_3d.shape)
-        '''feature_3d2.shape:  torch.Size([90, 8, 8, 8, 256])'''
         decoder_features = [feature_3d for _ in range(self.config.scales_deformable)]
         check_para('model_deformerable',decoder_features = decoder_features)
         # data = F.grid_sample(feature_3d, cad_data.view(-1,self.grid_sample,self.grid_sample,self.grid_sample,-1), mode='bilinear', padding_mode='zeros', align_corners=None)
         # print('data0.shape: ',data.shape)
         #data = data.view(data.shape[0],data.shape[1],-1).permute(0,2,1)
-        bs = feature_3d.size(0)
+        
         query_embed = self.query_embed.unsqueeze(1).repeat(1, bs, 1)
         tgt = torch.zeros_like(query_embed)
         query_ref_point = self.query_ref_point_proj(tgt)

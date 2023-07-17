@@ -7,7 +7,7 @@ import os
 import torch
 from torch.utils.tensorboard import SummaryWriter
 from datasets.dataset import CADGENdataset
-from model.model import Views2Points
+from model.model_deformerable import Views2Points
 from timm.scheduler import CosineLRScheduler
 from model.loss import CADLoss
 import os
@@ -16,7 +16,6 @@ import os, sys
 # optimizer
 import torch.optim as optim
 import numpy as np
-from apex import amp
 from torch.cuda.amp import autocast as autocast
 import h5py
 
@@ -40,29 +39,31 @@ cfg = parser.get_args()
 model = Views2Points(cfg)
 cfg.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # load from checkpoint if provided
-model_path = '/scratch/sg7484/CMDGen/results/exp_3d2cmd1/model/CADGEN_best'
+model_path = '/scratch/sg7484/CMDGen/results/noauto/deformable4_lrtest/fulldata_noauto_deformable4_res50_unet3_1e-5/model/CADGEN___125_1.3406925201416016_test_6.660653114318848'
 model_par = torch.load(model_path)
 model.load_state_dict(model_par)
 model = model.to(cfg.device)
-model.eval()
+#model.eval()
 
 # create dataloader
-dataset_test = CADGENdataset(cfg, 'test')
+dataset_test = CADGENdataset(cfg, test =False)
 test_loader = torch.utils.data.DataLoader(dataset_test,
-                                            batch_size=cfg.test_batch,
-                                            shuffle=True,
+                                            batch_size=1,
+                                            shuffle=False,
                                             num_workers=cfg.num_workers)
 print("Total number of test data:", len(test_loader))
 
 if not os.path.exists(cfg.test_outputs):
     os.makedirs(cfg.test_outputs)
 #cfg.outputs = "{}/results/test_{}".format(cfg.exp_dir, cfg.ckpt)
-
-
+cfg.test_outputs = '/scratch/sg7484/CMDGen/results/noauto/output/fulldata_noauto_deformable4_res50_unet3_1e-5_overfitting'
+if not os.path.exists(cfg.test_outputs):
+    os.makedirs(cfg.test_outputs)
 # evaluate
-
+gen_num = 0
+total_gen = 100
 for i, data in enumerate(test_loader):
-    front_pic,top_pic,side_pic,cad_data,command,paramaters = data['data']
+    front_pic,top_pic,side_pic,cad_data,command,paramaters , data_num = data
     front_pic = front_pic.to(cfg.device)
     top_pic = top_pic.to(cfg.device)
     side_pic = side_pic.to(cfg.device)
@@ -82,15 +83,20 @@ for i, data in enumerate(test_loader):
             outputs["tgt_commands"] = command
             outputs["tgt_args"] = paramaters
             batch_out_vec = logits2vec(outputs)
-
+    #print('batch_out_vec: ',batch_out_vec)
     for j in range(batch_size):
         out_vec = batch_out_vec[j]
         seq_len = commands_[j].tolist().index(EOS_IDX)
-        print('data["id"]: ',data["id"])
-        data_id = data["id"][j].split('/')[-1]
 
-        save_path = os.path.join(cfg.test_outputs, '{}_vec.h5'.format(data_id))
+        print('data_num: ',data_num)
+        data_idex = int(data_num[0])
+        save_path = os.path.join(cfg.test_outputs, '{}_vec.h5'.format(data_idex))
         print('save_path: ',save_path)
         with h5py.File(save_path, 'w') as fp:
             fp.create_dataset('out_vec', data=out_vec[:seq_len], dtype=np.int)
             fp.create_dataset('gt_vec', data=gt_vec[j][:seq_len], dtype=np.int)
+        gen_num+=1
+        if gen_num>=total_gen:
+            break
+    if gen_num>=total_gen:
+        break

@@ -384,7 +384,7 @@ class Views2Points(nn.Module):
     def __init__(self,config):
         super().__init__()
         self.img_feature = ResNet50(resnet_out = int(config.resnet_out/4))
-        self.unet = ResidualUNet3D(config.resnet_out*3,config.UNet_out,num_levels = 4)
+        self.unet = ResidualUNet3D(config.resnet_out*3,config.UNet_out,num_levels = 3)
         self.config = config
         
         d_model_transdecoder = config.d_model_transdecoder
@@ -393,7 +393,7 @@ class Views2Points(nn.Module):
         num_decoder_layers_transdecoder = config.num_decoder_layers_transdecoder
         dim_feedforward_transdecoder = config.dim_feedforward_transdecoder
         dropout_transdecoder = config.dropout_transdecoder
-        
+        self.cad_pro = nn.Linear(3,config.d_model*3)
         self.text_encoder = Text_Encoder(config)
 
         decoder_layer = MyTransformerDecoderLayer(d_model_transdecoder, nhead_transdecoder, dim_feedforward_transdecoder, dropout_transdecoder)
@@ -403,30 +403,37 @@ class Views2Points(nn.Module):
         self.fcn = FCN(self.config.d_model, self.config.n_commands, self.config.n_args, self.config.args_dim)
 
     def encoder(self, side,front,top,cad_data,command,paramaters):
-        side_feature = self.img_feature(side)
-        front_feature = self.img_feature(front)
-        top_feature = self.img_feature(top)
-        print('side_feature.shape: ',side_feature.shape)
-        print('front_features.shape: ',front_feature.shape)
-        print('top_feature.shape: ',top_feature.shape)
-        '''side_feature.shape:  torch.Size([10, 256, 8, 8])
-            front_features.shape:  torch.Size([10, 256, 8, 8])
-            top_feature.shape:  torch.Size([10, 256, 8, 8])'''
-        assert side_feature.shape[-1]==front_feature.shape[-1]==top_feature.shape[-1]==side_feature.shape[-2]==front_feature.shape[-2]==top_feature.shape[-2]
-        repeat_num = side_feature.shape[-1]
-        side_3d = side_feature.unsqueeze(-3).repeat(1,1,repeat_num,1,1)
-        front_3d = front_feature.unsqueeze(-2).repeat(1,1,1,repeat_num,1)
-        top_3d = top_feature.unsqueeze(-1).repeat(1,1,1,1,repeat_num)
-        print('side_3d.shape: ',side_3d.shape)
-        print('front_3d.shape: ',front_3d.shape)
-        print('top_3d.shape: ',top_3d.shape)
-        '''side_3d.shape:  torch.Size([10, 256, 8, 8, 8])
-            front_3d.shape:  torch.Size([10, 256, 8, 8, 8])
-            top_3d.shape:  torch.Size([10, 256, 8, 8, 8])'''
-        feature_3d = torch.cat((side_3d,front_3d,top_3d),dim=1)
-        print('feature_3d1.shape: ',feature_3d.shape)
-        '''feature_3d1.shape:  torch.Size([10, 768, 8, 8, 8])'''
-        feature_3d = self.unet(feature_3d)
+        # side_feature = self.img_feature(side)
+        # front_feature = self.img_feature(front)
+        # top_feature = self.img_feature(top)
+        # print('side_feature.shape: ',side_feature.shape)
+        # print('front_features.shape: ',front_feature.shape)
+        # print('top_feature.shape: ',top_feature.shape)
+        # '''side_feature.shape:  torch.Size([10, 256, 8, 8])
+        #     front_features.shape:  torch.Size([10, 256, 8, 8])
+        #     top_feature.shape:  torch.Size([10, 256, 8, 8])'''
+        # assert side_feature.shape[-1]==front_feature.shape[-1]==top_feature.shape[-1]==side_feature.shape[-2]==front_feature.shape[-2]==top_feature.shape[-2]
+        # repeat_num = side_feature.shape[-1]
+        # side_3d = side_feature.unsqueeze(-3).repeat(1,1,repeat_num,1,1)
+        # front_3d = front_feature.unsqueeze(-2).repeat(1,1,1,repeat_num,1)
+        # top_3d = top_feature.unsqueeze(-1).repeat(1,1,1,1,repeat_num)
+        # print('side_3d.shape: ',side_3d.shape)
+        # print('front_3d.shape: ',front_3d.shape)
+        # print('top_3d.shape: ',top_3d.shape)
+        # '''side_3d.shape:  torch.Size([10, 256, 8, 8, 8])
+        #     front_3d.shape:  torch.Size([10, 256, 8, 8, 8])
+        #     top_3d.shape:  torch.Size([10, 256, 8, 8, 8])'''
+        # feature_3d = torch.cat((side_3d,front_3d,top_3d),dim=1)
+        # print('feature_3d1.shape: ',feature_3d.shape)
+        # '''feature_3d1.shape:  torch.Size([10, 768, 8, 8, 8])'''
+        
+        batch_size = cad_data.size(0)
+        cad_data = self.cad_pro(cad_data)
+        print('cad_data.shape: ',cad_data.shape)
+        cad_data = cad_data.view(batch_size,self.grid_sample,self.grid_sample,self.grid_sample,-1)
+        cad_data = cad_data.permute(0,4,1,2,3)
+        print('cad_data2.shape: ',cad_data.shape)
+        feature_3d = self.unet(cad_data)
         print('feature_3d2.shape: ',feature_3d.shape)
         '''feature_3d2.shape:  torch.Size([10, 256, 8, 8, 8])'''
         data = feature_3d.float()
