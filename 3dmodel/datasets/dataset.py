@@ -32,6 +32,7 @@ class CADGENdataset(data.Dataset):
         else:
             with open(self.train_lis, 'r') as f:
                 lines = f.readlines()
+                lines = lines[25970:]
         self.file_list = []
         for line in lines:
             self.file_list.append(line.strip())
@@ -58,21 +59,31 @@ class CADGENdataset(data.Dataset):
         return pc
     
     def __getitem__(self, index):
+        
         data_num = self.file_list[index]
+        #print('data_num: ',data_num)
         cad_path = os.path.join(self.cad_root, data_num+'.npy')
         #print('cad_path: ',cad_path)
+        if not os.path.exists(cad_path):
+            dat_num = self.file_list[index-1]
+            cad_path = os.path.join(self.cad_root, data_num+'.npy')
+            print('cad_path: ',cad_path)
+        front_pic_path = os.path.join(self.pic_root,data_num+'_f.png')
+        top_pic_path = os.path.join(self.pic_root,data_num+'_t.png')
+        side_pic_path = os.path.join(self.pic_root,data_num+'_r.png')
+        front_pic = cv2.imread(front_pic_path)
+        top_pic = cv2.imread(top_pic_path)
+        side_pic = cv2.imread(side_pic_path)
+        
         cad_data = IO.get(cad_path).astype(np.float32)
-        #print('debug-------------------------------------')
         cad_data = self.random_sample(cad_data, self.sample_points_num)
-        #print('debug-------------------------------------')
         cad_data = self.pc_norm(cad_data)
         cad_data = torch.from_numpy(cad_data).float()
         
         h5_path = os.path.join(self.h5_root, data_num+'.h5') 
         with h5py.File(h5_path, "r") as fp:
             cad_vec = fp["vec"][:] # (len, 1 + N_ARGS)
-        #print('cad_vec: ',cad_vec)
-        #print('cad_vec.shape: ',cad_vec.shape)
+
         pad_len = self.max_total_len - cad_vec.shape[0]
         cad_vec = np.concatenate([cad_vec, EOS_VEC[np.newaxis].repeat(pad_len, axis=0)], axis=0)
         command = cad_vec[:, 0]
@@ -83,18 +94,12 @@ class CADGENdataset(data.Dataset):
         command = command.clamp(0,5)
         paramaters = paramaters.clamp(-1,255)
         
-        front_pic_path = os.path.join(self.pic_root,data_num+'_f.png')
-        top_pic_path = os.path.join(self.pic_root,data_num+'_t.png')
-        side_pic_path = os.path.join(self.pic_root,data_num+'_r.png')
-        front_pic = cv2.imread(front_pic_path)
-        top_pic = cv2.imread(top_pic_path)
-        side_pic = cv2.imread(side_pic_path)
+
         front_pic = self.transforms(front_pic)
         top_pic = self.transforms(top_pic)
         side_pic = self.transforms(side_pic)
 
         data = (front_pic,top_pic,side_pic,cad_data,command,paramaters, data_num)
-        #print('data_num: ',data_num)
         return data
     
     def __len__(self):

@@ -16,9 +16,11 @@ def get_args():
     parser.add_argument('--pic_root', type=str, default=PIC_ROOT)#
     
     #model
+    parser.add_argument('--resnet', type=int, default=18)
     parser.add_argument('--resnet_in', type=int, default=16)
     parser.add_argument('--resnet_out', type=int, default=32)
     parser.add_argument('--UNet_out', type=int, default=256)
+    parser.add_argument('--unet_dim', type=int, default=3)
 
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--weight_decay', type=float, default=0.05)

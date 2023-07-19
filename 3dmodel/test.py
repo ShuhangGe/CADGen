@@ -39,14 +39,14 @@ cfg = parser.get_args()
 model = Views2Points(cfg)
 cfg.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # load from checkpoint if provided
-model_path = '/scratch/sg7484/CMDGen/results/noauto/deformable4_lrtest/fulldata_noauto_deformable4_res50_unet3_1e-5/model/CADGEN___125_1.3406925201416016_test_6.660653114318848'
+model_path = '/scratch/sg7484/CMDGen/results/noauto/fulldata_noauto_deformable3_res18_unet4_lrtest_retrainable/fulldata_noauto_deformable3_res18_unet4_1e-4/model/CADGEN_best_35_4.137737274169922_test_4.850296974182129.path'
 model_par = torch.load(model_path)
-model.load_state_dict(model_par)
+model.load_state_dict(model_par['model_dict'])
 model = model.to(cfg.device)
 #model.eval()
 
 # create dataloader
-dataset_test = CADGENdataset(cfg, test =False)
+dataset_test = CADGENdataset(cfg, test =True)
 test_loader = torch.utils.data.DataLoader(dataset_test,
                                             batch_size=1,
                                             shuffle=False,
@@ -56,7 +56,7 @@ print("Total number of test data:", len(test_loader))
 if not os.path.exists(cfg.test_outputs):
     os.makedirs(cfg.test_outputs)
 #cfg.outputs = "{}/results/test_{}".format(cfg.exp_dir, cfg.ckpt)
-cfg.test_outputs = '/scratch/sg7484/CMDGen/results/noauto/output/fulldata_noauto_deformable4_res50_unet3_1e-5_overfitting'
+cfg.test_outputs = '/scratch/sg7484/CMDGen/results/noauto/output/fulldata_noauto_deformable3_res18_unet4_best_35_4.13_test_4.85_1e-4_test'
 if not os.path.exists(cfg.test_outputs):
     os.makedirs(cfg.test_outputs)
 # evaluate

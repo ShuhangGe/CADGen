@@ -17,7 +17,7 @@ from .model_utils import _make_seq_first, _make_batch_first, \
     _get_padding_mask, _get_key_padding_mask, _get_group_mask
     
 from .unet3d import ResidualUNet3D
-from .resnet_backbone import ResNet18
+from .resnet_backbone import ResNet50,ResNet18
 from typing import Optional, List
 
 import logging
@@ -507,8 +507,11 @@ class Views2Points(nn.Module):
     '''
     def __init__(self,config):
         super().__init__()
-        self.img_feature = ResNet18(resnet_out = int(config.resnet_out))
-        self.unet = ResidualUNet3D(config.resnet_out*3,config.UNet_out,num_levels = 4)
+        if config.resnet == 50:
+            self.img_feature = ResNet50(resnet_out = int(config.resnet_out/4))
+        elif config.resnet == 18:
+            self.img_feature = ResNet18(resnet_out = int(config.resnet_out))
+        self.unet = ResidualUNet3D(config.resnet_out*3,config.UNet_out,num_levels = config.unet_dim)
         self.config = config
         self.grid_sample = config.grid_sample
         

@@ -91,11 +91,11 @@ def main():
     test_data = CADGENdataset(args,test=True)
     train_loader = torch.utils.data.DataLoader(train_data,
                                             batch_size=args.train_batch,
-                                            shuffle=True,
+                                            shuffle=False,
                                             num_workers=args.num_workers)
     test_loader = torch.utils.data.DataLoader(test_data,
                                                batch_size=args.test_batch,
-                                               shuffle=True,
+                                               shuffle=False,
                                                num_workers=args.num_workers)
     model = Views2Points(args)
     for arg in vars(args):
@@ -124,13 +124,20 @@ def main():
         pretrain_model = torch.load(retrain_model)
         model.load_state_dict(pretrain_model)
     for epoch in range(args.epochs):
+        print("epoch: ", epoch)
+
         loss_cmd_train = 0
         loss_args_train = 0
         train_num = 0
         loss_sum = 0
         for index, data in enumerate(train_loader,0):
+            print("epoch: ", epoch)
+
             model.train()
             front_pic,top_pic,side_pic,cad_data,command,paramaters, data_num = data
+            print("data_num: ",data_num)
+            # if epoch <70000:
+            #     continue
             front_pic = front_pic.to(args.device)
             top_pic = top_pic.to(args.device)
             side_pic = side_pic.to(args.device)
@@ -187,8 +194,8 @@ def main():
                     output_test["tgt_commands"] = command
                     output_test["tgt_args"] = paramaters
                     loss_dict_test = loss_fun(output_test)
-                    loss_cmd_test += loss_dict["loss_cmd"]
-                    loss_args_test += loss_dict["loss_args"]
+                    loss_cmd_test += loss_dict_test["loss_cmd"]
+                    loss_args_test += loss_dict_test["loss_args"]
                     loss_test = sum(loss_dict_test.values())
                     loss_test_sum +=loss_test
                 test_num += 1
