@@ -32,7 +32,6 @@ class CADGENdataset(data.Dataset):
         else:
             with open(self.train_lis, 'r') as f:
                 lines = f.readlines()
-                lines = lines[25970:]
         self.file_list = []
         for line in lines:
             self.file_list.append(line.strip())
@@ -67,7 +66,7 @@ class CADGENdataset(data.Dataset):
         if not os.path.exists(cad_path):
             dat_num = self.file_list[index-1]
             cad_path = os.path.join(self.cad_root, data_num+'.npy')
-            print('cad_path: ',cad_path)
+            #print('cad_path: ',cad_path)
         front_pic_path = os.path.join(self.pic_root,data_num+'_f.png')
         top_pic_path = os.path.join(self.pic_root,data_num+'_t.png')
         side_pic_path = os.path.join(self.pic_root,data_num+'_r.png')

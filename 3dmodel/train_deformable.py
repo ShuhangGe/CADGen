@@ -132,10 +132,10 @@ def main():
         loss_sum = 0
         for index, data in enumerate(train_loader,0):
             print("epoch: ", epoch)
-
+            print('len(train_loader): ',len(train_loader),'index: ',index)
             model.train()
             front_pic,top_pic,side_pic,cad_data,command,paramaters, data_num = data
-            print("data_num: ",data_num)
+            #print("data_num: ",data_num)
             # if epoch <70000:
             #     continue
             front_pic = front_pic.to(args.device)
@@ -150,7 +150,7 @@ def main():
                 output["tgt_commands"] = command
                 output["tgt_args"] = paramaters
                 loss_dict = loss_fun(output)
-            print('len(train_loader): ',len(train_loader),'index: ',index)
+            
             loss_cmd_train += loss_dict["loss_cmd"]
             loss_args_train += loss_dict["loss_args"]
             train_num += 1

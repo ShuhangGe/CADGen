@@ -1,1 +1,0 @@
-python train.py --save_path ../results/test 

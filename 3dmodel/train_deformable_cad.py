@@ -181,8 +181,8 @@ def main():
                     output_test["tgt_commands"] = command
                     output_test["tgt_args"] = paramaters
                     loss_dict_test = loss_fun(output_test)
-                    loss_cmd_test += loss_dict["loss_cmd"]
-                    loss_args_test += loss_dict["loss_args"]
+                    loss_cmd_test += loss_dict_test["loss_cmd"]
+                    loss_args_test += loss_dict_test["loss_args"]
                     loss_test = sum(loss_dict_test.values())
                     loss_test_sum +=loss_test
                 test_num += 1

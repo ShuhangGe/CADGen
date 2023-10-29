@@ -13,10 +13,11 @@ for line in lines:
 all_lines.sort()
 print(all_lines[:100],'\n')
 length  = len(all_lines)
-index_order = np.arange(length)
 split_ratio = 0.9
-index = np.random.permutation(index_order)
 
+
+index_order = np.arange(length)
+index = np.random.permutation(index_order)
 train_index = index[:int(length*split_ratio)]
 test_index = index[int(length*split_ratio):]
 print(train_index[:100],'\n')

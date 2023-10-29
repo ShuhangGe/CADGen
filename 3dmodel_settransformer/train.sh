@@ -1,1 +1,0 @@
-python train.py --data_root ../datasets --save_path exp_3pic

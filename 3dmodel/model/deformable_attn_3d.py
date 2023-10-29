@@ -142,6 +142,7 @@ class DeformableHeadAttention(nn.Module):
         :param ref_point: B, H, W, 2
         :return:
         """
+        print('\n\nDeformableHeadAttention')
         #check_para('deformable_attn',query = query, keys = keys,ref_point = ref_point,query_mask = query_mask, key_masks=key_masks)
         #print('\n')
         #print('self.voxel_length: ',self.voxel_length)
@@ -161,33 +162,39 @@ class DeformableHeadAttention(nn.Module):
         #print('query.shape: {}, {}'.format(nbatches,point_num))   
         # B, H, W, C
         query = self.q_proj(query)
-        #check_para(None,query = query)
+        check_para(None,query = query)
+        '''query: torch.Size([10, 64, 256])'''
         # B, H, W, 2MLK
         offset = self.offset_proj(query)
-        #check_para(None,offset = offset)
+        check_para(None,offset = offset)
+        '''offset: torch.Size([10, 64, 216])'''
         # B, H, W, M, 2LK
         offset = offset.view(nbatches, point_num, self.h, -1)
         # B, H, W, MLK
         A = self.A_proj(query)
-        #check_para(None,A = A,offset2 = offset)
+        check_para(None,A = A,offset2 = offset)
+        '''A: torch.Size([10, 64, 72])
+        offset2: torch.Size([10, 64, 8, 27])'''
         # B, H, W, 1, mask before softmax
         #print('\n')
         #print('query_mask is None')
         if query_mask is not None:
             #print('query_mask is not None')
             query_mask_ = query_mask.unsqueeze(dim=-1)
-            #######check_para(None,query_mask_ = query_mask_)
+            check_para(None,query_mask_ = query_mask_)
             _, _, _, mlk = A.shape
             query_mask_ = query_mask_.expand(nbatches, query_height, query_width, mlk)
-            #check_para(None,query_mask_2 = query_mask_)
+            check_para(None,query_mask_2 = query_mask_)
             A = torch.masked_fill(A, mask=query_mask_, value=float('-inf'))
-            #check_para(None,A = A)
+            check_para(None,A = A)
 
         # B, H, W, M, LK
         A = A.view(nbatches, point_num, self.h, -1)
-        #check_para(None,A2 = A)
+        check_para(None,A2 = A)
+        '''A2: torch.Size([10, 64, 8, 9])'''
         A = F.softmax(A, dim=-1)
-        #check_para(None,A3 = A)
+        check_para(None,A3 = A)
+        '''A3: torch.Size([10, 64, 8, 9])'''
         # mask nan position
         if query_mask is not None:
             # B, H, W, 1, 1
@@ -199,38 +206,48 @@ class DeformableHeadAttention(nn.Module):
             attns['offsets'] = offset
 
         offset = offset.view(nbatches, point_num, self.h, self.scales, self.k, 3)
-        #check_para(None,offset = offset)
+        check_para(None,offset = offset)
+        '''offset: torch.Size([10, 64, 8, 3, 3, 3])'''
         offset = offset.permute(0, 2,3,4,1,5).contiguous()
-        #check_para(None,offset = offset)
+        check_para(None,offset = offset)
+        '''offset: torch.Size([10, 8, 3, 3, 64, 3])'''
         # B*M, L, K, H, W, 2
         offset = offset.view(nbatches * self.h, self.scales, self.k, point_num, 3)
-        #check_para(None,offset = offset)
+        check_para(None,offset = offset)
+        '''offset: torch.Size([80, 3, 3, 64, 3])'''
 
         A = A.permute(0, 2, 1, 3).contiguous()
-        #check_para(None,A = A)
+        check_para(None,A = A)
+        '''A: torch.Size([10, 8, 64, 9])'''
         # B*M, H*W, LK
         A = A.view(nbatches * self.h, point_num, -1)
-        #check_para(None,A = A)
+        check_para(None,A = A)
+        '''A: torch.Size([80, 64, 9])'''
 
         scale_features = []
         for l in range(self.scales):
             #print('l:   ',l)
             feat_map = keys[l]
-            #check_para(None,feat_map = feat_map)
+            check_para(None,feat_map = feat_map)
+            '''feat_map: torch.Size([10, 8, 8, 8, 256])'''
             _, h, w, z,_ = feat_map.shape
             #print('feat_map.shape: ',feat_map.shape)
             key_mask = key_masks[l]
-            #check_para(None,key_mask = key_mask)
+            check_para(None,key_mask = key_mask)
+            '''key_mask is None'''
             # B, H, W, 2
             reversed_ref_point = restore_scale(height=h, width=w, ref_point=ref_point)
-            #check_para(None,reversed_ref_point = reversed_ref_point)
+            check_para(None,reversed_ref_point = reversed_ref_point)
+            '''reversed_ref_point: torch.Size([10, 64, 3])'''
 
             # B, H, W, 2 -> B*M, H, W, 2
             reversed_ref_point = reversed_ref_point.repeat(self.h, 1, 1)
-            #check_para(None,reversed_ref_point = reversed_ref_point)
+            check_para(None,reversed_ref_point = reversed_ref_point)
+            '''reversed_ref_point: torch.Size([80, 64, 3])'''
             # B, h, w, M, C_v
             scale_feature = self.k_proj(feat_map).view(nbatches, h, w, z, self.h, self.d_k)
-            #check_para(None,scale_feature = scale_feature)
+            check_para(None,scale_feature = scale_feature)
+            '''scale_feature: torch.Size([10, 8, 8, 8, 8, 32])'''
             # if key_mask is not None:
             #     print('key_mask is not None')
             #     # B, h, w, 1, 1
@@ -243,10 +260,12 @@ class DeformableHeadAttention(nn.Module):
 
             # B, M, C_v, h, w
             scale_feature = scale_feature.permute(0, 4, 5, 1, 2,3).contiguous()
-            #check_para(None,scale_feature = scale_feature)
+            check_para(None,scale_feature = scale_feature)
+            '''scale_feature: torch.Size([10, 8, 32, 8, 8, 8])'''
             # B*M, C_v, h, w
             scale_feature = scale_feature.view(-1, self.d_k, h, w, z)
-            #check_para(None,scale_feature = scale_feature)
+            check_para(None,scale_feature = scale_feature)
+            '''scale_feature: torch.Size([80, 32, 8, 8, 8])'''
             k_features = []
             #print('self.k: ',self.k)
             for k in range(self.k):
@@ -254,59 +273,76 @@ class DeformableHeadAttention(nn.Module):
                 # print('reversed_ref_point.shape: ',reversed_ref_point.shape)
                 # print('offset[:, l, k, :, :].shape: ',offset[:, l, k, :, :].shape)
                 points = reversed_ref_point + offset[:, l, k, :, :]
-                #check_para(None,points = points)
+                check_para(None,points = points)
+                '''points: torch.Size([80, 64, 3])'''
                 vgrid_x = 3.0 * points[:, :, 0] / max(w - 1, 1) - 1.0
-                #check_para(None,vgrid_x = vgrid_x)
+                check_para(None,vgrid_x = vgrid_x)
+                '''vgrid_x: torch.Size([80, 64])'''
                 vgrid_y = 3.0 * points[:, :, 1] / max(h - 1, 1) - 1.0
-                #check_para(None,vgrid_y = vgrid_y)
+                check_para(None,vgrid_y = vgrid_y)
+                '''vgrid_y: torch.Size([80, 64])'''
                 vgrid_z = 3.0 * points[:, :, 1] / max(z - 1, 1) - 1.0
-                #check_para(None,vgrid_z = vgrid_z)
+                check_para(None,vgrid_z = vgrid_z)
+                '''vgrid_z: torch.Size([80, 64])'''
                 vgrid_scaled = torch.stack((vgrid_x, vgrid_y, vgrid_z), dim=2)
                 num,_,_ = vgrid_scaled.shape
                 vgrid_scaled = vgrid_scaled.view(num, self.voxel_length,self.voxel_length,self.voxel_length,3)
-                #check_para(None,vgrid_scaled = vgrid_scaled)
+                check_para(None,vgrid_scaled = vgrid_scaled)
+                '''vgrid_scaled: torch.Size([80, 4, 4, 4, 3])'''
 
                 # B*M, C_v, H, W
                 feat = F.grid_sample(scale_feature, vgrid_scaled, mode='bilinear', padding_mode='zeros')
                 #check_para(None,feat = feat)
                 k_features.append(feat)
-                #check_para(None,k_features = k_features)
+                check_para(None,k_features = k_features)
+                '''k_features[0]: torch.Size([80, 32, 4, 4, 4])  k_features[1]: torch.Size([80, 32, 4, 4, 4])  k_features[2]: torch.Size([80, 32, 4, 4, 4])'''
             # B*M, k, C_v, H, W
             k_features = torch.stack(k_features, dim=1)
-            #check_para(None,k_features = k_features)
+            check_para(None,k_features = k_features)
+            '''k_features: torch.Size([80, 3, 32, 4, 4, 4])'''
             scale_features.append(k_features)
-            #check_para(None,scale_features = scale_features)
+            check_para(None,scale_features = scale_features)
+            '''scale_features[0]: torch.Size([80, 3, 32, 4, 4, 4])  scale_features[1]: torch.Size([80, 3, 32, 4, 4, 4])  scale_features[2]: torch.Size([80, 3, 32, 4, 4, 4])'''
 
         # B*M, L, K, C_v, H, W
         scale_features = torch.stack(scale_features, dim=1)
-        #check_para(None,scale_features = scale_features)
+        check_para(None,scale_features = scale_features)
+        '''scale_features: torch.Size([80, 3, 3, 32, 4, 4, 4])'''
         # B*M, H*W, C_v, LK
         scale_features = scale_features.permute(0, 4, 5, 6, 3, 1, 2).contiguous()
-        #check_para(None,scale_features = scale_features)
+        check_para(None,scale_features = scale_features)
+        '''scale_features: torch.Size([80, 4, 4, 4, 32, 3, 3])'''
         scale_features = scale_features.view(nbatches * self.h, point_num, self.d_k, -1)
-        #check_para(None,scale_features = scale_features)
-
+        check_para(None,scale_features = scale_features)
+        '''scale_features: torch.Size([80, 64, 32, 9])'''
+        '''A: torch.Size([80, 64, 9])'''
         # B*M, H*W, C_v
         #print('A.shape: ',A.shape)
         feat = torch.einsum('nlds, nls -> nld', scale_features, A)
-        #check_para(None,feat = feat)
+        check_para(None,feat = feat)
+        '''feat: torch.Size([80, 64, 32])'''
         # B*M, H*W, C_v -> B, M, H, W, C_v
         feat = feat.view(nbatches, self.h, point_num, self.d_k)
-        #check_para(None,feat = feat)
+        check_para(None,feat = feat)
+        '''feat: torch.Size([10, 8, 64, 32])'''
         # B, M, H, W, C_v -> B, H, W, M, C_v
         feat = feat.permute(0, 2, 1, 3).contiguous()
-        #check_para(None,feat = feat)
+        check_para(None,feat = feat)
+        '''feat: torch.Size([10, 64, 8, 32])'''
         # B, H, W, M, C_v -> B, H, W, M * C_v
         feat = feat.view(nbatches, point_num, self.d_k * self.h)
-        #check_para(None,feat = feat)
+        check_para(None,feat = feat)
+        '''feat: torch.Size([10, 64, 256])'''
 
         feat = self.wm_proj(feat)
-        #check_para(None,feat = feat)
+        check_para(None,feat = feat)
         if self.dropout:
             feat = self.dropout(feat)
         feat = feat.unsqueeze(2)
-        #check_para(None,feat = feat)
-        #check_para(None,attns = attns)
+        check_para(None,feat = feat)
+        '''feat: torch.Size([10, 64, 1, 256])'''
+        check_para(None,attns = attns)
+        '''attns[attns] is None    attns[offsets] is None'''
         return feat, attns
     
 

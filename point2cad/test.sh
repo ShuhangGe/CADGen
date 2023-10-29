@@ -1,1 +1,0 @@
-python test.py --data_path /home/shuhang/Desktop/data/cad/Sketch_1_Extrude_1 --save_path ../test
