@@ -241,7 +241,8 @@ def multi_head_attention_forward(query,                           # type: Tensor
         # print('attn_output_weights.shape: ',attn_output_weights.shape)
         attn_output_weights = attn_output_weights.masked_fill(
             key_padding_mask.unsqueeze(1).unsqueeze(2),
-            float('-inf'),
+            1e9,
+            #float('-inf'),
         )
         # print('attn_output_weights.shape: ',attn_output_weights.shape)
         # print('bsz: ',bsz)

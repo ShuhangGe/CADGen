@@ -55,8 +55,8 @@ class FCN(nn.Module):
 
     def forward(self, out):
         S, N, _ = out.shape
-        print('out.shape: ',out.shape)
-        print('self.d_model: ',self.d_model)
+        # print('out.shape: ',out.shape)
+        # print('self.d_model: ',self.d_model)
         # command_logits = self.command_fcn(out)  # Shape [S, N, n_commands]
 
         args_logits = self.args_fcn(out)  # Shape [S, N, n_args * args_dim]
@@ -95,7 +95,7 @@ class MaskedAutoencoderViT(nn.Module):
         # --------------------------------------------------------------------------
         # MAE decoder specifics
         self.decoder_embed = nn.Linear(embed_dim, decoder_embed_dim, bias=True)
-
+        self.decoder_command = nn.Linear(embed_dim, decoder_embed_dim, bias=True)
         self.mask_token = nn.Parameter(torch.zeros(1, 1, decoder_embed_dim))
 
         self.decoder_pos_embed = nn.Parameter(torch.zeros(1, self.max_len, decoder_embed_dim), requires_grad=False)  # fixed sin-cos embedding
@@ -145,10 +145,6 @@ class MaskedAutoencoderViT(nn.Module):
         Per-sample shuffling is done by argsort random noise.
         x: [N, L, D], sequence
         """
-        '''x.shape:  torch.Size([10, 64, 256])
-            commmand_embed.shape:  torch.Size([10, 64, 256])
-            key_padding_mask.shape:  torch.Size([10, 64])'''
-        print('mask_ratio: ',mask_ratio)
         N, L, D = x.shape  # batch, length, dim
         len_keep = int(L * (1 - mask_ratio))
         
@@ -165,9 +161,7 @@ class MaskedAutoencoderViT(nn.Module):
         x_keep = torch.gather(x, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, D))
         key_padding_mask_keep = torch.gather(key_padding_mask.unsqueeze(-1), dim=1, index=ids_keep.unsqueeze(-1))
         padding_mask_keep = torch.gather(padding_mask.unsqueeze(-1), dim=1, index=ids_keep.unsqueeze(-1))
-        '''command_masked.shape:  torch.Size([10, 16, 256])
-            x_keep.shape:  torch.Size([10, 48, 256])
-            key_padding_mask_keep.shape:  torch.Size([10, 48, 1])'''
+
         # generate the binary mask: 0 is keep, 1 is remove
         mask = torch.ones([N, L], device=x.device)
         mask[:, :len_keep] = 0
@@ -218,7 +212,7 @@ class MaskedAutoencoderViT(nn.Module):
         x = self.decoder_embed(x)
         temp = torch.zeros(1, 1, x.shape[-1]).to(self.device)
         command_mask  = temp.repeat(x.shape[0], x.shape[1], 1)
-        commmand_embed = self.decoder_embed(commmand_embed)
+        commmand_embed = self.decoder_command(commmand_embed)
         '''commmand_embed.shape:  torch.Size([512, 16, 128])'''
         # append mask tokens to sequence
         mask_tokens = self.mask_token.repeat(x.shape[0], ids_restore.shape[1] - x.shape[1], 1)#+1 include cls token 
