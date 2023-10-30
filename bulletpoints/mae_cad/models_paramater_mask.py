@@ -181,8 +181,8 @@ class MaskedAutoencoderViT(nn.Module):
         '''commmand.shape:  torch.Size([10, 64])
             paramaters.shape:  torch.Size([10, 64, 16])'''
         padding_mask, key_padding_mask = _get_padding_mask(commmand, seq_dim=-1), _get_key_padding_mask(commmand, seq_dim=-1)
-        print('padding_mask.shape: ',padding_mask.shape)
-        print('key_padding_mask.shape: ',key_padding_mask.shape)
+        # print('padding_mask.shape: ',padding_mask.shape)
+        # print('key_padding_mask.shape: ',key_padding_mask.shape)
         '''
         padding_mask.shape:  torch.Size([10, 64])
             key_padding_mask.shape:  torch.Size([10, 64])
@@ -195,22 +195,22 @@ class MaskedAutoencoderViT(nn.Module):
 
         # masking: length -> length * mask_ratio
         x, mask, ids_restore, command_masked, padding_mask_keep, key_padding_mask_keep= self.random_masking(x, commmand_embed, padding_mask, key_padding_mask, mask_ratio)
-        print('x.shape: ',x.shape)
+        # print('x.shape: ',x.shape)
         padding_mask_keep = padding_mask_keep.permute(1,0,2)
         key_padding_mask_keep = key_padding_mask_keep.squeeze(-1)
         # apply Transformer blocks
         # for blk in self.blocks:
         #     x = blk(x)
         # x = self.norm(x)
-        print('key_padding_mask_keep.shape: ',key_padding_mask_keep.shape)
+        # print('key_padding_mask_keep.shape: ',key_padding_mask_keep.shape)
         x = x.permute(1,0,2)
         x = self.encoder(x, mask=None, src_key_padding_mask=key_padding_mask_keep)
-        print('x0.shape: ',x.shape)
+        # print('x0.shape: ',x.shape)
         '''x0.shape:  torch.Size([48(sequence length), 10(batch size), 256])'''
-        print('padding_mask_keep.shape: ',padding_mask_keep.shape)
+        # print('padding_mask_keep.shape: ',padding_mask_keep.shape)
         x = self.norm(x)
         x = x.permute(1,0,2)
-        print('x1.shape: ',x.shape)
+        # print('x1.shape: ',x.shape)
         return x, mask, ids_restore,command_masked
 
     def forward_decoder(self, x, ids_restore,commmand_embed):
@@ -237,7 +237,7 @@ class MaskedAutoencoderViT(nn.Module):
         for blk in self.decoder_blocks:
             x = blk(x)
         x = self.decoder_norm(x)
-        print('x1.shape: ',x.shape)
+        # print('x1.shape: ',x.shape)
         # predictor projection
         args_logits = self.fcn(x)
         res = { 

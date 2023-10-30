@@ -90,9 +90,9 @@ def multi_head_attention_forward(query,                           # type: Tensor
         if torch.equal(query, key) and torch.equal(key, value):
             # self-attention
             q, k, v = F.linear(query, in_proj_weight, in_proj_bias).chunk(3, dim=-1)
-            print('q.shape: ',q.shape)
-            print('k.shape: ',k.shape)
-            print('v.shape: ',v.shape)
+            # print('q.shape: ',q.shape)
+            # print('k.shape: ',k.shape)
+            # print('v.shape: ',v.shape)
             '''q.shape:  torch.Size([60, 10, 256])
             k.shape:  torch.Size([60, 10, 256])
             v.shape:  torch.Size([60, 10, 256])'''
@@ -238,16 +238,16 @@ def multi_head_attention_forward(query,                           # type: Tensor
 
     if key_padding_mask is not None:
         attn_output_weights = attn_output_weights.view(bsz, num_heads, tgt_len, src_len)
-        print('attn_output_weights.shape: ',attn_output_weights.shape)
+        # print('attn_output_weights.shape: ',attn_output_weights.shape)
         attn_output_weights = attn_output_weights.masked_fill(
             key_padding_mask.unsqueeze(1).unsqueeze(2),
             float('-inf'),
         )
-        print('attn_output_weights.shape: ',attn_output_weights.shape)
-        print('bsz: ',bsz)
-        print('num_heads: ',num_heads)
-        print('tgt_len: ',tgt_len)
-        print('src_len: ',src_len)
+        # print('attn_output_weights.shape: ',attn_output_weights.shape)
+        # print('bsz: ',bsz)
+        # print('num_heads: ',num_heads)
+        # print('tgt_len: ',tgt_len)
+        # print('src_len: ',src_len)
         attn_output_weights = attn_output_weights.view(bsz * num_heads, tgt_len, src_len)
 
     attn_output_weights = F.softmax(
