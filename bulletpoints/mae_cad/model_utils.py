@@ -28,8 +28,8 @@ def _get_key_padding_mask(commands, seq_dim=0):
     with torch.no_grad():
         key_padding_mask = (commands == EOS_IDX).cumsum(dim=seq_dim) > 0
 
-        if seq_dim == 0:
-            return key_padding_mask.transpose(0, 1)
+        # if seq_dim == 0:
+        #     return key_padding_mask.transpose(0, 1)
         return key_padding_mask
 
 
@@ -47,8 +47,8 @@ def _get_padding_mask(commands, seq_dim=0, extended=False):
             #print('S: ',S)
             torch.narrow(padding_mask.clone(), seq_dim, 3, S-3).add_(torch.narrow(padding_mask, seq_dim, 0, S-3)).clamp_(max=1)
             #print('padding_mask:2 ',padding_mask)
-        if seq_dim == 0:
-            return padding_mask.unsqueeze(-1)
+        # if seq_dim == 0:
+        #     return padding_mask.unsqueeze(-1)
         return padding_mask
 
 
