@@ -43,9 +43,14 @@ class CADGENdataset(data.Dataset):
         with h5py.File(h5_path, "r") as fp:
             cad_vec = fp["vec"][:] # (len, 1 + N_ARGS)
         # print('cad_vec.shape[0]: ',cad_vec.shape[0])
-        pad_len = self.max_total_len - cad_vec.shape[0]
-
+        pad_len = self.max_total_len - cad_vec.shape[0]+1
+        # print('cad_vec.shape: ',cad_vec.shape)
+        cad_vec = cad_vec[:-1,:]
+        # print('cad_vec.shape: ',cad_vec.shape)
+        
         cad_vec = np.concatenate([cad_vec, EOS_VEC[np.newaxis].repeat(pad_len, axis=0)], axis=0)
+        # print('cad_vec.shape: ',cad_vec.shape)
+        # a= b
         command = cad_vec[:, 0]
         paramaters = cad_vec[:, 1:]
         
