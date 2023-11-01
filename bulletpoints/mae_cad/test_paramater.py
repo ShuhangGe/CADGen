@@ -52,6 +52,7 @@ def logits2vec( outputs, refill_pad=True, to_numpy=True):
     if to_numpy:
         out_cad_vec = out_cad_vec.detach().cpu().numpy()
     return out_cad_vec
+
 if __name__ == '__main__':
     '''
     8:
@@ -74,7 +75,9 @@ if __name__ == '__main__':
     parser.add_argument('--data_root', type=str, default=config.DATA_ROOT, help='train and test data list, in txt format')  
     parser.add_argument('--cmd_root', type=str, default=config.H5_ROOT,help='data path of cad commands, in hdf5 format')    
     parser.add_argument('--device', type=str, default=config.DEVICE, help='GPU or CPU')
-    parser.add_argument('--save_path', type=str, default=config.SAVE_PATH, help='path to save the model')
+    parser.add_argument('--save_root', type=str, default='./save_root', help='path to save the output')
+    parser.add_argument('--model_path', type=str, default='./model_path', help='trained model ')
+    parser.add_argument('--out_num', type=int, default=1000, help='trained model ')
     #commands paramaters
     parser.add_argument('--max_total_len', type=int, default=MAX_TOTAL_LEN, help='maximum cad sequence length 64')
     parser.add_argument('--n_args', type=int, default=N_ARGS, help='number of paramaters of each command 16')
@@ -95,12 +98,17 @@ if __name__ == '__main__':
     })
     #load parmaters
     args = parser.parse_args()
+    out_num = args.out_num
     epochs = args.epochs
     device = args.device
+    save_root = args.save_root
+    model_path = args.model_path
+    print(torch.cuda.is_available())
     if device =='gpu' or device=='GPU':
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
     else:
         device = "cpu"
+    
 
     test_dataset = CADGENdataset(args, test = True)
 
@@ -112,12 +120,11 @@ if __name__ == '__main__':
     model = MaskedAutoencoderViT(args,mask_ratio=args.mask_ratio, embed_dim=args.embed_dim, depth=args.depth, num_heads=args.num_heads,
                  decoder_embed_dim=args.decoder_embed_dim, decoder_depth=args.decoder_depth, decoder_num_heads=args.decoder_num_heads,
                  mlp_ratio=args.mlp_ratio)
-    for arg in vars(args):
-        print(arg, ':', getattr(args, arg))
-    print('model:',model)
+    # for arg in vars(args):
+    #     print(arg, ':', getattr(args, arg))
+    # print('model:',model)
     
-    save_root = '/scratch/sg7484/CADGen/results/bulletpoints/mae/alldata/mask_0.5-en_12_12-de_8_16-1e-4/out'
-    model_path = '/scratch/sg7484/CADGen/results/bulletpoints/mae/alldata/mask_0.5-en_12_12-de_8_16-1e-4/model/MAE_CAD_278_0.7673679815871375.path'
+
     if os.path.exists(save_root) == False:
         os.makedirs(save_root)
     model.load_state_dict(torch.load(model_path))
@@ -125,6 +132,7 @@ if __name__ == '__main__':
     model = model.to(device)
     print('start train')
     total_length = len(test_loader)
+    out_count = 0
     for epoch in range(epochs):
         epoch_start = time.time()
         with torch.no_grad():
@@ -166,7 +174,9 @@ if __name__ == '__main__':
                 print('gt_vec.shape: ',gt_vec.shape)
                 np.savetxt(os.path.join(save_root,f'{data_id}_out_vec.txt'), out_vec[:seq_len])
                 np.savetxt(os.path.join(save_root,f'{data_id}_gt_vec.txt'), gt_vec[j][:seq_len])
-
+            out_count += index+1
+            if out_count >= out_num:
+                break
 
 
 
