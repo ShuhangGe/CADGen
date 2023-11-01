@@ -8,7 +8,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.autograd import Variable,Function
 import time
 import torchvision
-from models_paramater_changed import MaskedAutoencoderViT
+from models_paramater_mask import MaskedAutoencoderViT
 import config
 from macro import *
 from loss import CADLoss
@@ -44,8 +44,8 @@ def logits2vec( outputs, refill_pad=True, to_numpy=True):
     out_args = torch.argmax(torch.softmax(outputs['args_logits'], dim=-1), dim=-1) - 1  # (N, S, N_ARGS)
     if refill_pad: # fill all unused element to -1
         mask = ~torch.tensor(CMD_ARGS_MASK).bool().cuda()[out_command.long()]
-        print('out_args.shape: ',out_args.shape)
-        print('mask.shape: ',mask.shape)
+        # print('out_args.shape: ',out_args.shape)
+        # print('mask.shape: ',mask.shape)
         out_args[mask] = -1
 
     out_cad_vec = torch.cat([out_command.unsqueeze(-1), out_args], dim=-1)
@@ -82,20 +82,19 @@ if __name__ == '__main__':
     parser.add_argument('--max_total_len', type=int, default=MAX_TOTAL_LEN, help='maximum cad sequence length 64')
     parser.add_argument('--n_args', type=int, default=N_ARGS, help='number of paramaters of each command 16')
     parser.add_argument('--n_commands', type=int, default=len(ALL_COMMANDS), help='Number of commands categories 6')
-    #paramaters of model
+    #paramaters of model embdeeing
     parser.add_argument('--mask_ratio', type=float, default=0.25, help='mask ratio of MAE')
     parser.add_argument('--embed_dim', type=int, default=256, help='embedding dimension of MAE encoder')
+    parser.add_argument('--dim_feedforward', type=int, default=16, help='FF dimensionality: forward dimension in transformer')
+    parser.add_argument('--dropout', type=float, default=0.1, help='Dropout rate used in basic layers and Transformers')
     parser.add_argument('--depth', type=int, default=12, help='depth of encoder')
     parser.add_argument('--num_heads', type=int, default=16, help='num_heads of encoder')
+    #deocder
     parser.add_argument('--decoder_embed_dim', type=int, default=128)
     parser.add_argument('--decoder_depth', type=int, default=8)
     parser.add_argument('--decoder_num_heads', type=int, default=16)
     parser.add_argument('--mlp_ratio', type=float, default=4.)
     parser.add_argument('--args_dim', type=int, default=256)
-    parser.add_argument('--loss_weights', type=dict, default={
-        "loss_cmd_weight": 2.0,
-        "loss_args_weight": 1.0
-    })
     #load parmaters
     args = parser.parse_args()
     out_num = args.out_num
@@ -105,7 +104,7 @@ if __name__ == '__main__':
     model_path = args.model_path
     print(torch.cuda.is_available())
     if device =='gpu' or device=='GPU':
-        device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
         device = "cpu"
     
@@ -151,30 +150,29 @@ if __name__ == '__main__':
                 output["tgt_commands"] = command
                 output["tgt_args"] = paramaters
                 # command = command.unsqueeze(-1)
-                print('command.shape: ',command.shape)
+                # print('command.shape: ',command.shape)
                 command_out = F.one_hot(command, num_classes=6)
-                print('command_out.shape: ',command_out.shape) 
+                # print('command_out.shape: ',command_out.shape) 
                 output["command_logits"] = command_out.type(torch.float32)
                 out_cad_vec = logits2vec(output)
                 gt_vec = torch.cat([command.unsqueeze(-1), paramaters], dim=-1).squeeze(1).detach().cpu().numpy()
                 batch_size = command.shape[0]
-                loss = loss_fun(output)
-                print('loss_train',loss.item())
+                # loss = loss_fun(output)
+                #print('loss_train',loss.item())
             for j in range(batch_size):
                 out_vec = out_cad_vec[j]
                 seq_len = command[j].tolist().index(EOS_IDX)
                 data_id = epoch*batch_size+j
-
                 save_path = os.path.join(save_root, '{}_vec.h5'.format(data_id))
                 print('save_path: ',save_path)
                 with h5py.File(save_path, 'w') as fp:
                     fp.create_dataset('out_vec', data=out_vec[:seq_len], dtype=np.int)
                     fp.create_dataset('gt_vec', data=gt_vec[j][:seq_len], dtype=np.int)
-                print('out_vec.shape: ',out_vec.shape)
-                print('gt_vec.shape: ',gt_vec.shape)
+                #print('out_vec.shape: ',out_vec.shape)
+                #print('gt_vec.shape: ',gt_vec.shape)
                 np.savetxt(os.path.join(save_root,f'{data_id}_out_vec.txt'), out_vec[:seq_len])
                 np.savetxt(os.path.join(save_root,f'{data_id}_gt_vec.txt'), gt_vec[j][:seq_len])
-            out_count += index+1
+                out_count += 1
             if out_count >= out_num:
                 break
 

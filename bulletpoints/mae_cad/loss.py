@@ -40,19 +40,19 @@ class loss_fun():
         return loss
     def command_loss(self, command, pred, mask):
         # command = F.one_hot(command, num_classes=6)
-        print('command.shape: ',command.shape)
-        print('pred.shape: ',pred.shape)
-        print('mask.shape: ',mask.shape)
+        # print('command.shape: ',command.shape)
+        # print('pred.shape: ',pred.shape)
+        # print('mask.shape: ',mask.shape)
         output = torch.mul(pred, mask.unsqueeze(-1).repeat(1,1,6))
         output = output.type(torch.float32)
         target = torch.mul(command, mask)
         target = target.type(torch.long)
-        print('output.shape: ',output.shape)
-        print('target.shape: ',target.shape)
-        print('type(output): ',type(output))
-        print('type(target): ',type(target))
+        # print('output.shape: ',output.shape)
+        # print('target.shape: ',target.shape)
+        # print('type(output): ',type(output))
+        # print('type(target): ',type(target))
         loss = self.loss(output, target)
-        print('loss.shape: ',loss.shape)
+        #print('loss.shape: ',loss.shape)
         a=b
         return loss
 def squared_emd_loss_one_hot_labels(y_pred, y_true, mask=None):
@@ -108,8 +108,8 @@ def squared_emd_loss(logits, labels, num_classes=-1, mask=None):
 
     y_pred_temp = torch.argmax(y_pred, dim=-1)
     y_true_temp = torch.argmax(y_true, dim=-1)
-    print('y_pred_temp: ',y_pred_temp)
-    print('y_true_temp: ',y_true_temp)
+    #print('y_pred_temp: ',y_pred_temp)
+    #print('y_true_temp: ',y_true_temp)
     correct = y_pred_temp.eq(y_true_temp).sum().item()
     num = mask.shape[0]
     # logging.info(f'y_pred: {y_pred}')
