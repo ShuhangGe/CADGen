@@ -18,7 +18,7 @@ N_POINTS = 2000
 
 random.seed(1234)
 
-PC_ROOT = "../data/pc_cad"
+PC_ROOT = "/home/shuhang/Desktop/projects/cmdgen/CMDGen/results/out/fulldata_noauto_deformable3_res18_unet4_best_35_4.13_test_4.85_1e-4_test/gt_vec"
 RECORD_FILE = "../data/train_val_test_split.json"
 
 
@@ -217,14 +217,18 @@ def normalize_pc(points):
 def collect_test_set_pcs(args):
     start = time.time()
 
-    with open(os.path.join(RECORD_FILE), "r") as fp:
-        all_data = json.load(fp)['test']
+    # with open(os.path.join(RECORD_FILE), "r") as fp:
+    #     all_data = json.load(fp)['test']
+    # select_idx = random.sample(list(range(len(all_data))), args.n_test + 5)
+    # all_data = [all_data[x] for x in select_idx]
+    all_data = sorted(glob.glob(os.path.join(args.src, "*.ply")))
     select_idx = random.sample(list(range(len(all_data))), args.n_test + 5)
     all_data = [all_data[x] for x in select_idx]
-
+    print('len(all_data): ',len(all_data))
     ref_pcs = []
-    for data_id in all_data:
-        pc_path = os.path.join(PC_ROOT, data_id + '.ply')
+    for pc_path in all_data:
+        # print('data_path: ',data_path)
+        # pc_path = os.path.join(PC_ROOT, data_path + '.ply')
         if not os.path.exists(pc_path):
             continue
         pc = read_ply(pc_path)
@@ -235,7 +239,7 @@ def collect_test_set_pcs(args):
         ref_pcs.append(pc)
         if len(ref_pcs) >= args.n_test:
             break
-
+    print(len(ref_pcs))
     ref_pcs = np.stack(ref_pcs, axis=0)
     print("reference point clouds: {}".format(ref_pcs.shape))
     print("time: {:.2f}s".format(time.time() - start))
@@ -270,7 +274,7 @@ def collect_src_pcs(args):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--src", type=str)
+    parser.add_argument("--src", type=str)#path of sample_pcs
     parser.add_argument('-g', '--gpu_ids', type=str, default=0, help="gpu to use, e.g. 0  0,1,2. CPU not supported.")
     parser.add_argument("--n_test", type=int, default=1000)
     parser.add_argument("--multi", type=int, default=3)
@@ -283,17 +287,17 @@ def main():
 
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_ids)
 
-    if args.output is None:
-        args.output = args.src + '_eval_gen.txt'
+    # if args.output is None:
+    #     args.output = args.src + '_eval_gen.txt'
 
-    fp = open(args.output, "w")
+    # fp = open(args.output, "w")
 
     result_list = []
+    print('args.times: ',args.times)
     for i in range(args.times):
         print("iteration {}...".format(i))
         ref_pcs = collect_test_set_pcs(args)
         sample_pcs = collect_src_pcs(args)
-
         jsd = jsd_between_point_cloud_sets(sample_pcs, ref_pcs, in_unit_sphere=False)
 
         sample_pcs = torch.tensor(sample_pcs).cuda()
@@ -302,17 +306,30 @@ def main():
         result.update({"JSD": jsd})
 
         print(result)
-        print(result, file=fp)
+        # print(result, file=fp)
         result_list.append(result)
     avg_result = {}
     for k in result_list[0].keys():
         avg_result.update({"avg-" + k: np.mean([x[k] for x in result_list])})
     print("average result:")
     print(avg_result)
-    print(avg_result, file=fp)
+    # print(avg_result, file=fp)
 
-    fp.close()
+    # fp.close()
 
 
 if __name__ == '__main__':
     main()
+
+
+'''
+singularity exec --nv \
+                    --overlay /scratch/sg7484/pytorch-example/CMDGen-15GB-500K.ext3:ro \
+                        /scratch/work/public/singularity/cuda11.2.2-cudnn8-devel-ubuntu20.04.sif \
+                        /bin/bash -c "source /ext3/env.sh; python /scratch/sg7484/CADGen/bulletpoints/mae_cad/test_paramater.py --epochs 9000 --lr 1e-4\
+                        --train_batch 256 --test_batch 100 --max_total_len 64 --mask_ratio 0.5 --out_num 1000 \
+                        --depth 12 --decoder_depth 12 --num_heads 16 --decoder_num_heads 16\
+                        --save_root /scratch/sg7484/CADGen/results/bulletpoints/mae/main_paramater_mask/eval \
+                        --model_path /scratch/sg7484/CADGen/results/bulletpoints/mae/main_paramater_mask/main_paramater_mask5_all_en_12_16_de_12_16_1e-4/model/MAE_CAD_242_0.5820884598152978.path\
+                        --data_root /scratch/sg7484/data/CMDGen/all_data --cmd_root /scratch/sg7484/data/CMDGen/all_data/cad_vec "
+'''
