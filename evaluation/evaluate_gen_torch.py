@@ -18,8 +18,7 @@ N_POINTS = 2000
 
 random.seed(1234)
 
-PC_ROOT = "/home/shuhang/Desktop/projects/cmdgen/CMDGen/results/out/fulldata_noauto_deformable3_res18_unet4_best_35_4.13_test_4.85_1e-4_test/gt_vec"
-RECORD_FILE = "../data/train_val_test_split.json"
+# RECORD_FILE = "../data/train_val_test_split.json"
 
 
 def distChamfer(a, b):
@@ -221,7 +220,7 @@ def collect_test_set_pcs(args):
     #     all_data = json.load(fp)['test']
     # select_idx = random.sample(list(range(len(all_data))), args.n_test + 5)
     # all_data = [all_data[x] for x in select_idx]
-    all_data = sorted(glob.glob(os.path.join(args.src, "*.ply")))
+    all_data = sorted(glob.glob(os.path.join(args.out_path, "*.ply")))
     select_idx = random.sample(list(range(len(all_data))), args.n_test + 5)
     all_data = [all_data[x] for x in select_idx]
     print('len(all_data): ',len(all_data))
@@ -249,7 +248,7 @@ def collect_test_set_pcs(args):
 def collect_src_pcs(args):
     start = time.time()
 
-    all_paths = sorted(glob.glob(os.path.join(args.src, "*.ply")))
+    all_paths = sorted(glob.glob(os.path.join(args.gt_path, "*.ply")))
     if len(all_paths) < args.multi * args.n_test:
         raise ValueError("Generate set too small: {}".format(len(all_paths)))
 
@@ -274,7 +273,9 @@ def collect_src_pcs(args):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--src", type=str)#path of sample_pcs
+    # parser.add_argument("--src", type=str)#path of sample_pcs
+    parser.add_argument("--gt_path", type=str)#path of sample_pcs
+    parser.add_argument("--out_path", type=str)#path of sample_pcs
     parser.add_argument('-g', '--gpu_ids', type=str, default=0, help="gpu to use, e.g. 0  0,1,2. CPU not supported.")
     parser.add_argument("--n_test", type=int, default=1000)
     parser.add_argument("--multi", type=int, default=3)
@@ -333,3 +334,4 @@ singularity exec --nv \
                         --model_path /scratch/sg7484/CADGen/results/bulletpoints/mae/main_paramater_mask/main_paramater_mask5_all_en_12_16_de_12_16_1e-4/model/MAE_CAD_242_0.5820884598152978.path\
                         --data_root /scratch/sg7484/data/CMDGen/all_data --cmd_root /scratch/sg7484/data/CMDGen/all_data/cad_vec "
 '''
+'''{'avg-MMD-CD': 0.02090051770210266, 'avg-COV-CD': 0.7400000095367432, 'avg-JSD': 0.06739123331427699}'''

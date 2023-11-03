@@ -11,11 +11,15 @@ from cadlib.visualize import vec2CADsolid, CADsolid2pc
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--src', type=str, default=None, required=True)
+parser.add_argument('--src', type=str, default='./save_path', required=True)
 parser.add_argument('--n_points', type=int, default=2000)
-args = parser.parse_args()
+parser.add_argument('--root_dir', type=str, default='./out')
+parser.add_argument('--name', type=str, default='gt_vec')
 
-SAVE_DIR = os.path.join(args.src , '_pc_gt')
+args = parser.parse_args()
+root_dir = args.root_dir
+name = args.name
+SAVE_DIR = os.path.join(args.src , f'{name}')#out_vec, gt_vec
 if not os.path.exists(SAVE_DIR):
     os.makedirs(SAVE_DIR)
 
@@ -30,7 +34,7 @@ def process_one(path):
     # print("[processing] {}".format(data_id))
     with h5py.File(path, 'r') as fp:
         
-        out_vec = fp["gt_vec"][:].astype(np.float)#out_vec
+        out_vec = fp[f"{name}"][:].astype(np.float)#out_vec, gt_vec
         #print(out_vec)
     
 
@@ -55,11 +59,12 @@ def process_one(path):
 
 # all_paths = glob.glob(os.path.join(args.src, "*.h5"))
 # Parallel(n_jobs=8, verbose=2)(delayed(process_one)(x) for x in all_paths)
-root_dir = '/home/rl4citygen/gsh/data/result_3pic2cmd/out'
-names = os.listdir(root_dir)
-names.sort()
-for name in names:
-    data_path = os.path.join(root_dir,name)
+all_path = glob.glob(os.path.join(root_dir, "*.h5"))
+# print(all_path)
+all_path.sort()
+for data_path in all_path:
+    print('path: ',data_path)
+    # data_path = os.path.join(root_dir,name)
     process_one(data_path)
 
 '''python collect_gen_pc.py --src /home/rl4citygen/gsh/data/result_3pic2cmd/out'''
