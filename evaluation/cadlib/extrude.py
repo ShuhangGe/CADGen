@@ -159,12 +159,19 @@ class Extrude(object):
     def from_vector(vec, is_numerical=False, n=256):
         """vector representation: commands [SOL, ..., SOL, ..., EXT]"""
         assert vec[-1][0] == EXT_IDX and vec[0][0] == SOL_IDX
+        # print('vec: ',vec)
+        '''replce the extrude command to end command'''
         profile_vec = np.concatenate([vec[:-1], EOS_VEC[np.newaxis]])
+        # print('EOS_VEC[np.newaxis]: ',EOS_VEC[np.newaxis])
+        # print('profile_vec: ',profile_vec)
         profile = Profile.from_vector(profile_vec, is_numerical=is_numerical)
+        #print('profile: ',profile)
         ext_vec = vec[-1][-N_ARGS_EXT:]
 
         sket_pos = ext_vec[N_ARGS_PLANE:N_ARGS_PLANE + 3]
+        print('sket_pos: ',sket_pos)
         sket_size = ext_vec[N_ARGS_PLANE + N_ARGS_TRANS - 1]
+        print('sket_size: ',sket_size)
         sket_plane = CoordSystem.from_vector(np.concatenate([sket_pos, ext_vec[:N_ARGS_PLANE]]))
         ext_param = ext_vec[-N_ARGS_EXT_PARAM:]
 
@@ -172,6 +179,7 @@ class Extrude(object):
                       sket_pos, sket_size)
         if is_numerical:
             res.denumericalize(n)
+        print('res: ',res)
         return res
 
     def __str__(self):
@@ -262,6 +270,7 @@ class CADSequence(object):
     @staticmethod
     def from_vector(vec, is_numerical=False, n=256):
         commands = vec[:, 0]
+        print('commands: ',commands)
         ext_indices = [-1] + np.where(commands == EXT_IDX)[0].tolist()
         ext_seq = []
         for i in range(len(ext_indices) - 1):

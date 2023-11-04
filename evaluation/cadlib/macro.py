@@ -18,8 +18,8 @@ N_ARGS_SKETCH = 5 # sketch parameters: x, y, alpha, f, r
 N_ARGS_PLANE = 3 # sketch plane orientation: theta, phi, gamma
 N_ARGS_TRANS = 4 # sketch plane origin + sketch bbox size: p_x, p_y, p_z, s
 N_ARGS_EXT_PARAM = 4 # extrusion parameters: e1, e2, b, u
-N_ARGS_EXT = N_ARGS_PLANE + N_ARGS_TRANS + N_ARGS_EXT_PARAM
-N_ARGS = N_ARGS_SKETCH + N_ARGS_EXT
+N_ARGS_EXT = N_ARGS_PLANE + N_ARGS_TRANS + N_ARGS_EXT_PARAM #3+4+4=11
+N_ARGS = N_ARGS_SKETCH + N_ARGS_EXT #5+11=16
 
 SOL_VEC = np.array([SOL_IDX, *([PAD_VAL] * N_ARGS)])
 EOS_VEC = np.array([EOS_IDX, *([PAD_VAL] * N_ARGS)])
