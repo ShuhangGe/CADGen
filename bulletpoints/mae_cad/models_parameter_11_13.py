@@ -1,13 +1,5 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
 
-# This source code is licensed under the license found in the
-# LICENSE file in the root directory of this source tree.
-# --------------------------------------------------------
-# References:
-# timm: https://github.com/rwightman/pytorch-image-models/tree/master/timm
-# DeiT: https://github.com/facebookresearch/deit
-# --------------------------------------------------------
+#followed MAGE
 
 from functools import partial
 
@@ -20,7 +12,28 @@ from util.pos_embed import get_1d_sincos_pos_embed_from_grid
 import torch.nn.functional as F
 import logging
 from loss import CADLoss
+from model_utils import _make_seq_first, _make_batch_first, \
+    _get_padding_mask, _get_key_padding_mask, _get_group_mask
+from layers.transformer import *
+from layers.improved_transformer import *
+from layers.positional_encoding import *
+class CADEmbedding(nn.Module):
+    """Embedding: positional embed + command embed + parameter embed + group embed (optional)"""
+    def __init__(self, args, seq_len, use_group=False):
+        super().__init__()
+        self.command_embed = nn.Embedding(args.n_commands, args.embed_dim)
+        args_dim = args.args_dim + 1
+        self.arg_embed = nn.Embedding(args_dim, 64, padding_idx=0)
+        self.embed_fcn = nn.Linear(64 * args.n_args, args.embed_dim)
 
+    def forward(self, commands, args, groups=None):
+        S, N = commands.shape
+        command_embed = self.command_embed(commands.long())
+        src =  command_embed+ \
+              self.embed_fcn(self.arg_embed((args + 1).long()).view(S, N, -1))  # shift due to -1 PAD_VAL
+        # src = self.pos_encoding(src)
+        return src,command_embed
+    
 class FCN(nn.Module):
     def __init__(self, d_model, n_commands, n_args, args_dim=256):
         super().__init__()
@@ -34,8 +47,8 @@ class FCN(nn.Module):
 
     def forward(self, out):
         S, N, _ = out.shape
-        print('out.shape: ',out.shape)
-        print('self.d_model: ',self.d_model)
+        # print('out.shape: ',out.shape)
+        # print('self.d_model: ',self.d_model)
         # command_logits = self.command_fcn(out)  # Shape [S, N, n_commands]
 
         args_logits = self.args_fcn(out)  # Shape [S, N, n_args * args_dim]
@@ -66,11 +79,15 @@ class MaskedAutoencoderViT(nn.Module):
             Block(embed_dim, num_heads, mlp_ratio, qkv_bias=True, qk_scale=None, norm_layer=norm_layer)
             for i in range(depth)])
         self.norm = norm_layer(embed_dim)
-
+        self.embedding = CADEmbedding(args, args.max_total_len)
+        
+        encoder_layer = TransformerEncoderLayerImproved(args.embed_dim, args.num_heads, args.dim_feedforward, args.dropout)
+        encoder_norm = LayerNorm(args.embed_dim)
+        self.encoder = TransformerEncoder(encoder_layer, args.depth, encoder_norm)
         # --------------------------------------------------------------------------
         # MAE decoder specifics
         self.decoder_embed = nn.Linear(embed_dim, decoder_embed_dim, bias=True)
-
+        self.decoder_command = nn.Linear(embed_dim, decoder_embed_dim, bias=True)
         self.mask_token = nn.Parameter(torch.zeros(1, 1, decoder_embed_dim))
 
         self.decoder_pos_embed = nn.Parameter(torch.zeros(1, self.max_len, decoder_embed_dim), requires_grad=False)  # fixed sin-cos embedding
@@ -89,10 +106,9 @@ class MaskedAutoencoderViT(nn.Module):
         # self.text_encoder = Text_Encoder(args)
         self.args = args.n_commands
         self.embed_dim =embed_dim
-        self.command_encoder = nn.Linear(1, embed_dim)
-        self.paramater_encoder = nn.Linear(args.n_args, embed_dim)
-        self.fcn = FCN(decoder_embed_dim, args.n_commands, args.n_args)
 
+        self.fcn = FCN(decoder_embed_dim, args.n_commands, args.n_args)
+        
     def initialize_weights(self):
         # initialization
         # initialize (and freeze) pos_embed by sin-cos embedding
@@ -115,7 +131,7 @@ class MaskedAutoencoderViT(nn.Module):
             nn.init.constant_(m.bias, 0)
             nn.init.constant_(m.weight, 1.0)
 
-    def random_masking(self, x, commmand_embed, mask_ratio):
+    def random_masking(self, x, commmand_embed, padding_mask, key_padding_mask, mask_ratio):
         """
         Perform per-sample random masking by per-sample shuffling.
         Per-sample shuffling is done by argsort random noise.
@@ -134,7 +150,9 @@ class MaskedAutoencoderViT(nn.Module):
         ids_keep = ids_shuffle[:, :len_keep]
         ids_masked = ids_shuffle[:, len_keep:]
         command_masked = torch.gather(commmand_embed, dim=1, index=ids_masked.unsqueeze(-1).repeat(1, 1, D))
-        x_masked = torch.gather(x, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, D))
+        x_keep = torch.gather(x, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, D))
+        key_padding_mask_keep = torch.gather(key_padding_mask.unsqueeze(-1), dim=1, index=ids_keep.unsqueeze(-1))
+        padding_mask_keep = torch.gather(padding_mask.unsqueeze(-1), dim=1, index=ids_keep.unsqueeze(-1))
 
         # generate the binary mask: 0 is keep, 1 is remove
         mask = torch.ones([N, L], device=x.device)
@@ -142,30 +160,43 @@ class MaskedAutoencoderViT(nn.Module):
         # unshuffle to get the binary mask
         mask = torch.gather(mask, dim=1, index=ids_restore)
 
-        return x_masked, mask, ids_restore, command_masked
+        return x_keep, mask, ids_restore, command_masked, padding_mask_keep, key_padding_mask_keep
 
-    def forward_encoder(self, x, commmand_embed,mask_ratio):
+    def forward_encoder(self, commmand, paramaters, mask_ratio):
         # # embed patches
-        # x = self.patch_embed(x)
-
-        # # add pos embed w/o cls token
+        '''commmand.shape:  torch.Size([10, 64])
+            paramaters.shape:  torch.Size([10, 64, 16])'''
+        padding_mask, key_padding_mask = _get_padding_mask(commmand, seq_dim=-1), _get_key_padding_mask(commmand, seq_dim=-1)
+        # print('padding_mask.shape: ',padding_mask.shape)
+        # print('key_padding_mask.shape: ',key_padding_mask.shape)
+        '''
+        padding_mask.shape:  torch.Size([10, 64])
+            key_padding_mask.shape:  torch.Size([10, 64])
+        padding_mask.shape:  torch.Size([64, 10, 1])
+            key_padding_mask.shape:  torch.Size([10, 64])'''
+        #padding_indicate = torch.sum(padding_mask,dim=-1)
+        x, commmand_embed= self.embedding(commmand, paramaters)
+        '''text.shape:  torch.Size([20, 64, 256])'''
         x = x + self.pos_embed[:, :, :]
 
         # masking: length -> length * mask_ratio
-        x, mask, ids_restore, command_masked= self.random_masking(x, commmand_embed, mask_ratio)
-        #print('x.shape: ',x.shape)
-        '''x.shape:  torch.Size([20(batchsize), 16(patch after mask), 256])'''
-
-        # # append cls token
-        # cls_token = self.cls_token + self.pos_embed[:, :1, :]
-        # cls_tokens = cls_token.expand(x.shape[0], -1, -1)
-        # x = torch.cat((cls_tokens, x), dim=1)
-
+        x, mask, ids_restore, command_masked, padding_mask_keep, key_padding_mask_keep= self.random_masking(x, commmand_embed, padding_mask, key_padding_mask, mask_ratio)
+        # print('x.shape: ',x.shape)
+        padding_mask_keep = padding_mask_keep.permute(1,0,2)
+        key_padding_mask_keep = key_padding_mask_keep.squeeze(-1)
         # apply Transformer blocks
-        for blk in self.blocks:
-            x = blk(x)
+        # for blk in self.blocks:
+        #     x = blk(x)
+        # x = self.norm(x)
+        # print('key_padding_mask_keep.shape: ',key_padding_mask_keep.shape)
+        x = x.permute(1,0,2)
+        x = self.encoder(x, mask=None, src_key_padding_mask=key_padding_mask_keep)
+        # print('x0.shape: ',x.shape)
+        '''x0.shape:  torch.Size([48(sequence length), 10(batch size), 256])'''
+        # print('padding_mask_keep.shape: ',padding_mask_keep.shape)
         x = self.norm(x)
-
+        x = x.permute(1,0,2)
+        # print('x1.shape: ',x.shape)
         return x, mask, ids_restore,command_masked
 
     def forward_decoder(self, x, ids_restore,commmand_embed):
@@ -173,22 +204,17 @@ class MaskedAutoencoderViT(nn.Module):
         x = self.decoder_embed(x)
         temp = torch.zeros(1, 1, x.shape[-1]).to(self.device)
         command_mask  = temp.repeat(x.shape[0], x.shape[1], 1)
-        print('x.shape: ',x.shape)
-        commmand_embed = self.decoder_embed(commmand_embed)
+        commmand_embed = self.decoder_command(commmand_embed)
         '''commmand_embed.shape:  torch.Size([512, 16, 128])'''
-        print('commmand_embed.shape: ',commmand_embed.shape)    
         # append mask tokens to sequence
         mask_tokens = self.mask_token.repeat(x.shape[0], ids_restore.shape[1] - x.shape[1], 1)#+1 include cls token 
-        print('mask_tokens.shape: ',mask_tokens.shape)
         '''mask_tokens.shape:  torch.Size([512, 16, 128])'''
         x_ = torch.cat([x[:, :, :], mask_tokens], dim=1)  # no cls token
         '''x_0.shape:  torch.Size([512, 64, 128])'''
         x = torch.gather(x_, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x.shape[2]))  # unshuffle
         '''x_0.shape:  torch.Size([512, 64, 128])'''
 
-        print('command_mask.shape: ',command_mask.shape)
         commmand_embed = torch.cat([command_mask, commmand_embed], dim=1)
-        print('commmand_embed.shape: ',commmand_embed.shape)
         commmand_embed = torch.gather(commmand_embed, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x.shape[2]))
         # add pos embed
         x = x + self.decoder_pos_embed
@@ -197,7 +223,7 @@ class MaskedAutoencoderViT(nn.Module):
         for blk in self.decoder_blocks:
             x = blk(x)
         x = self.decoder_norm(x)
-        print('x1.shape: ',x.shape)
+        # print('x1.shape: ',x.shape)
         # predictor projection
         args_logits = self.fcn(x)
         res = { 
@@ -210,20 +236,7 @@ class MaskedAutoencoderViT(nn.Module):
         mask_ratio = self.mask_ratio
         # text = self.text_encoder(command, paramaters,self.pos_embed)
         #expand one dimension to command
-        command = command.unsqueeze(-1)
-        command = command.type(torch.float32)
-        paramaters = paramaters.type(torch.float32)
-        commmand_embed = self.command_encoder(command)
-        paramater_embed = self.paramater_encoder(paramaters)
-        text = commmand_embed + paramater_embed
-        '''text.shape:  torch.Size([20, 64, 17])'''
-        # print('text.shape: ',text.shape)
-        # print('self.args: ',self.args)
-        # print('self.embed_dim: ',self.embed_dim)
-        # text = self.text_encoder(text)
-        # print('text.shape: ',text.shape)
-        '''text.shape:  torch.Size([20, 64, 256])'''
-        latent, mask, ids_restore,command_masked= self.forward_encoder(text,commmand_embed, mask_ratio)
+        latent, mask, ids_restore,command_masked= self.forward_encoder(command, paramaters, mask_ratio)
         #print('latent.shape: ',latent.shape)
         #print('mask.shape: ',mask.shape)
         #print('ids_restore.shape: ',ids_restore.shape)
