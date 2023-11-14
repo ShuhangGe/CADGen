@@ -8,7 +8,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.autograd import Variable,Function
 import time
 import torchvision
-from models_mae import MaskedAutoencoderViT
+from models_command import MaskedAutoencoderViT
 import config
 from macro import *
 from loss import Command_loss
@@ -134,15 +134,19 @@ if __name__ == '__main__':
     parser.add_argument('--max_total_len', type=int, default=MAX_TOTAL_LEN, help='maximum cad sequence length 64')
     parser.add_argument('--n_args', type=int, default=N_ARGS, help='number of paramaters of each command 16')
     parser.add_argument('--n_commands', type=int, default=len(ALL_COMMANDS), help='Number of commands categories 6')
-    #paramaters of model
+    #paramaters of model embdeeing
     parser.add_argument('--mask_ratio', type=float, default=0.25, help='mask ratio of MAE')
     parser.add_argument('--embed_dim', type=int, default=256, help='embedding dimension of MAE encoder')
+    parser.add_argument('--dim_feedforward', type=int, default=16, help='FF dimensionality: forward dimension in transformer')
+    parser.add_argument('--dropout', type=float, default=0.1, help='Dropout rate used in basic layers and Transformers')
     parser.add_argument('--depth', type=int, default=12, help='depth of encoder')
     parser.add_argument('--num_heads', type=int, default=16, help='num_heads of encoder')
+    #deocder
     parser.add_argument('--decoder_embed_dim', type=int, default=128)
     parser.add_argument('--decoder_depth', type=int, default=8)
     parser.add_argument('--decoder_num_heads', type=int, default=16)
     parser.add_argument('--mlp_ratio', type=float, default=4.)
+    parser.add_argument('--args_dim', type=int, default=256)
     
     #load parmaters
     args = parser.parse_args()
@@ -188,7 +192,7 @@ if __name__ == '__main__':
     print('model:',model)
     
     optimizer = torch.optim.AdamW(model.parameters(), lr=LR, betas=(0.9, 0.95))
-    loss_function = Command_loss()
+    loss_function = Command_loss(args)
 
     model = model.to(device)
     print('start train')

@@ -8,7 +8,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.autograd import Variable,Function
 import time
 import torchvision
-from models_paramater_2D import MaskedAutoencoderViT
+from gsh.CADGen.bulletpoints.mae_cad.models_parameter_2D import MaskedAutoencoderViT
 import config
 from macro import *
 from loss import CADLoss

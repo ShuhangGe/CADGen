@@ -234,6 +234,8 @@ class Command_loss(nn.Module):
         '''padding_mask.shape:  torch.Size([256, 64])'''
         # loss = squared_emd_loss(command_logits[padding_mask.bool()].reshape(-1, self.n_commands), tgt_commands[padding_mask.bool()].reshape(-1).long().clamp(0, 6), num_classes=6, mask=None)
         padding_mask  = padding_mask.bool()
+        print('padding_mask.shape: ',padding_mask.shape)
+        print('padding_mask: ',padding_mask)
         loss_total = 0 
         correct_total = 0
         num_total = 0
