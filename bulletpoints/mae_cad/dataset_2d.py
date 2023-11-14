@@ -45,12 +45,17 @@ class CADGENdataset(data.Dataset):
         # print('cad_vec.shape[0]: ',cad_vec.shape[0])
         pad_len = self.max_total_len - cad_vec.shape[0]+1
         # print('cad_vec.shape: ',cad_vec.shape)
+        print(cad_vec[0, 0], type(cad_vec[0, 0]))
+        print('command: ',cad_vec[:, 0])
+        extrude_cindex = list(cad_vec[:, 0]).index(5)
+        print('extrude_cindex: ',extrude_cindex)
         cad_vec = cad_vec[:-1,:]
         # print('cad_vec.shape: ',cad_vec.shape)
         
         cad_vec = np.concatenate([cad_vec, EOS_VEC[np.newaxis].repeat(pad_len, axis=0)], axis=0)
         # print('cad_vec.shape: ',cad_vec.shape)
         # a= b
+        
         command = cad_vec[:, 0]
         paramaters = cad_vec[:, 1:]
         
