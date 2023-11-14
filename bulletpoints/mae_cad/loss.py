@@ -111,10 +111,11 @@ def squared_emd_loss(logits, labels, num_classes=-1, mask=None):
     #print('y_pred_temp: ',y_pred_temp)
     #print('y_true_temp: ',y_true_temp)
     correct = y_pred_temp.eq(y_true_temp).sum().item()
-    num = mask.shape[0]
+    num = y_pred_temp.shape[0]
+    acc = correct/num
     # logging.info(f'y_pred: {y_pred}')
     # logging.info(f'y_true: {y_true}\n')
-    return squared_emd_loss_one_hot_labels(y_pred, y_true, mask=mask),correct,num
+    return squared_emd_loss_one_hot_labels(y_pred, y_true, mask=mask),acc
 
     
 class CADLoss(nn.Module):
@@ -211,48 +212,70 @@ class CADLoss(nn.Module):
         # res = {"loss_cmd": loss_cmd, "loss_args": loss_args}
         return loss_args
     
+# class Command_loss(nn.Module):
+#     def __init__(self, cfg):
+#         super().__init__()
+
+#         self.n_commands = cfg.n_commands
+#         # self.args_dim = cfg.args_dim + 1
+#         # self.weights = cfg.loss_weights
+
+#         # self.register_buffer("cmd_args_mask", torch.tensor(CMD_ARGS_MASK))
+
+#     def forward(self, command_logits, tgt_commands, mask):
+#         # Target & predictions
+#         np.set_printoptions(threshold=np.inf)
+#         torch.set_printoptions(profile="full")
+#         '''command_logits.shape:  torch.Size([256, 64, 6])'''
+#         '''tgt_commands.shape:  torch.Size([256, 64])'''
+#         '''mask.shape:  torch.Size([256, 64])'''
+#         visibility_mask = _get_visibility_mask(tgt_commands, seq_dim=-1)
+#         padding_mask = _get_padding_mask(tgt_commands, seq_dim=-1, extended=True) * visibility_mask.unsqueeze(-1)
+#         '''visibility_mask.shape:  torch.Size([256])'''
+#         '''padding_mask.shape:  torch.Size([256, 64])'''
+#         # loss = squared_emd_loss(command_logits[padding_mask.bool()].reshape(-1, self.n_commands), tgt_commands[padding_mask.bool()].reshape(-1).long().clamp(0, 6), num_classes=6, mask=None)
+#         padding_mask  = padding_mask.bool()
+#         print('padding_mask.shape: ',padding_mask.shape)
+#         print('padding_mask: ',padding_mask)
+#         loss_total = 0 
+#         correct_total = 0
+#         num_total = 0
+#         for index, mask_temp in enumerate(mask):
+#             mask_temp = mask_temp.unsqueeze(0)
+#             padding_mask_temp = padding_mask[index,:].unsqueeze(0)
+#             tgt_commands_temp = tgt_commands[index,:].unsqueeze(0)
+#             command_logits_temp = command_logits[index,:,:].unsqueeze(0)
+#             # print('mask_temp.shape: ',mask_temp.shape)
+#             # print('padding_mask_temp.shape: ',padding_mask_temp.shape)
+#             # print('tgt_commands_temp.shape: ',tgt_commands_temp.shape)
+#             # print('command_logits_temp.shape: ',command_logits_temp.shape)
+            
+#             loss_temp,correct ,num= squared_emd_loss(command_logits_temp[padding_mask_temp], tgt_commands_temp[padding_mask_temp].long().clamp(0, 6), num_classes=6, mask=mask_temp[padding_mask_temp])
+#             loss_total = loss_total + loss_temp
+#             num_total += num
+#             correct_total += correct
+#         loss_total = loss_total/index
+#         acc = correct_total/num_total
+#         return loss_total, acc
 class Command_loss(nn.Module):
     def __init__(self, cfg):
         super().__init__()
 
         self.n_commands = cfg.n_commands
-        # self.args_dim = cfg.args_dim + 1
-        # self.weights = cfg.loss_weights
-
-        # self.register_buffer("cmd_args_mask", torch.tensor(CMD_ARGS_MASK))
+        self.args_dim = cfg.args_dim + 1
 
     def forward(self, command_logits, tgt_commands, mask):
         # Target & predictions
-        np.set_printoptions(threshold=np.inf)
-        torch.set_printoptions(profile="full")
-        '''command_logits.shape:  torch.Size([256, 64, 6])'''
-        '''tgt_commands.shape:  torch.Size([256, 64])'''
-        '''mask.shape:  torch.Size([256, 64])'''
+        #print('tgt_commands.shape: ',tgt_commands.shape)
+        #print('tgt_args.shape: ',tgt_args.shape)
         visibility_mask = _get_visibility_mask(tgt_commands, seq_dim=-1)
         padding_mask = _get_padding_mask(tgt_commands, seq_dim=-1, extended=True) * visibility_mask.unsqueeze(-1)
-        '''visibility_mask.shape:  torch.Size([256])'''
-        '''padding_mask.shape:  torch.Size([256, 64])'''
-        # loss = squared_emd_loss(command_logits[padding_mask.bool()].reshape(-1, self.n_commands), tgt_commands[padding_mask.bool()].reshape(-1).long().clamp(0, 6), num_classes=6, mask=None)
-        padding_mask  = padding_mask.bool()
+        print('command_logits.shape: ',command_logits.shape)
         print('padding_mask.shape: ',padding_mask.shape)
-        print('padding_mask: ',padding_mask)
-        loss_total = 0 
-        correct_total = 0
-        num_total = 0
-        for index, mask_temp in enumerate(mask):
-            mask_temp = mask_temp.unsqueeze(0)
-            padding_mask_temp = padding_mask[index,:].unsqueeze(0)
-            tgt_commands_temp = tgt_commands[index,:].unsqueeze(0)
-            command_logits_temp = command_logits[index,:,:].unsqueeze(0)
-            # print('mask_temp.shape: ',mask_temp.shape)
-            # print('padding_mask_temp.shape: ',padding_mask_temp.shape)
-            # print('tgt_commands_temp.shape: ',tgt_commands_temp.shape)
-            # print('command_logits_temp.shape: ',command_logits_temp.shape)
-            
-            loss_temp,correct ,num= squared_emd_loss(command_logits_temp[padding_mask_temp], tgt_commands_temp[padding_mask_temp].long().clamp(0, 6), num_classes=6, mask=mask_temp[padding_mask_temp])
-            loss_total = loss_total + loss_temp
-            num_total += num
-            correct_total += correct
-        loss_total = loss_total/index
-        acc = correct_total/num_total
-        return loss_total, acc
+
+        print('shape1:  ',(command_logits[padding_mask.bool()].reshape(-1, self.n_commands)).shape)
+        print('shape2:  ',(tgt_commands[padding_mask.bool()].reshape(-1).long()).shape)
+        loss_cmd,correct = squared_emd_loss(command_logits[padding_mask.bool()].reshape(-1, self.n_commands), tgt_commands[padding_mask.bool()].reshape(-1).long())
+        # loss_cmd = F.cross_entropy(command_logits[padding_mask.bool()].reshape(-1, self.n_commands), tgt_commands[padding_mask.bool()].reshape(-1).long())
+        print('correct: ',correct)
+        return loss_cmd,correct

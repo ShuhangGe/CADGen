@@ -200,6 +200,8 @@ if __name__ == '__main__':
     writer = SummaryWriter(log_dir)
     for epoch in range(epochs):
         epoch_start = time.time()
+        train_Loss_total = 0
+        train_acc_total = 0
         for index, data in enumerate(train_loader):
             print(f'train: total length: {total_length}, index: {index}')
             model.train()
@@ -215,16 +217,22 @@ if __name__ == '__main__':
             mask.shape:  torch.Size([512, 64])'''
             # loss = F.cross_entropy(pred.permute(0,2,1), command,reduction = 'none') * mask
             # loss = loss.sum()/mask.sum()
-            loss = squared_emd_loss(pred, command, args.n_commands, mask)
-            print('loss.shape: ',loss.shape)
-            # loss = loss_function.command_loss(command =command, pred =pred, mask = mask)
+            # loss = squared_emd_loss(pred, command, args.n_commands, mask)
+            # print('loss.shape: ',loss.shape)
+            loss, acc= loss_function(command_logits =pred, tgt_commands =command,mask = mask)
+            train_Loss_total +=loss.item()
+            train_acc_total += acc
             loss.backward()
             optimizer.step()
-            writer.add_scalar('loss_train',loss,global_step=epoch)
-            print('loss_train',loss.item())
-
+            # print('loss_train',loss.item())
+            # print('loss_train',acc)
+        loss_average = train_Loss_total/(index+1)
+        acc_average = train_acc_total/(index+1)
+        writer.add_scalar('loss_train',loss_average,global_step=epoch)
+        writer.add_scalar('acc_train',acc_average,global_step=epoch)
         average_loss = 0
         test_loss = 0.0
+        test_acc = 0
         test_total = 0
         best_test = 10000000
         total_length = len(test_loader)
@@ -236,13 +244,17 @@ if __name__ == '__main__':
             pred, mask = model(command, paramaters)
             # loss = F.cross_entropy(pred.permute(0,2,1), command,reduction = 'none') * mask
             # loss = loss.sum()/mask.sum()      
-            loss = squared_emd_loss(pred, command, args.n_commands, mask)      
+            # loss = squared_emd_loss(pred, command, args.n_commands, mask)  
+            loss, acc = loss_function(command_logits =pred, tgt_commands =command, mask = mask)    
             test_loss += loss.item()
+            test_acc += acc
             # print('loss',loss)
         average_loss = test_loss/(index+1)
+        average_acc = test_acc/(index+1)
         # print('average_loss',average_loss)
-        writer.add_scalar('average_loss', average_loss, global_step=epoch)
-        print('average_loss: ',average_loss)
+        writer.add_scalar('test_loss', average_loss, global_step=epoch)
+        writer.add_scalar('test_acc', average_acc, global_step=epoch)
+        # print('average_loss: ',average_loss)
         if average_loss<best_test:
             best_test = average_loss
             if not os.path.exists(model_dir):
