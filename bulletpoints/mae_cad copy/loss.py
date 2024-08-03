@@ -8,7 +8,11 @@ import numpy as np
 import logging
 
 
-
+logging.basicConfig(level=logging.INFO,  
+                    filename='/scratch/sg7484/CADGen/bulletpoints/mae_cad/main_mae_cross.log',
+                    filemode='a', 
+                    format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s',
+                    )
 class loss_fun():
     def __init__(self):
         self.loss = nn.CrossEntropyLoss(reduction="none")
@@ -35,10 +39,18 @@ class loss_fun():
         print('loss: ',loss)
         return loss
     def command_loss(self, command, pred, mask):
+        # command = F.one_hot(command, num_classes=6)
+        # print('command.shape: ',command.shape)
+        # print('pred.shape: ',pred.shape)
+        # print('mask.shape: ',mask.shape)
         output = torch.mul(pred, mask.unsqueeze(-1).repeat(1,1,6))
         output = output.type(torch.float32)
         target = torch.mul(command, mask)
         target = target.type(torch.long)
+        # print('output.shape: ',output.shape)
+        # print('target.shape: ',target.shape)
+        # print('type(output): ',type(output))
+        # print('type(target): ',type(target))
         loss = self.loss(output, target)
         #print('loss.shape: ',loss.shape)
         a=b
@@ -199,9 +211,7 @@ class CADLoss(nn.Module):
         #loss_cmd = F.cross_entropy(command_logits.reshape(-1, self.n_commands), tgt_commands.reshape(-1).long().clamp(0, 6),ignore_index=-1)
 
         np.set_printoptions(threshold=np.inf)
-        #loss_args = F.cross_entropy(args_logits[mask.bool()].reshape(-1, self.args_dim), (tgt_args[mask.bool()].reshape(-1).long() + 1).clamp(1, 257),ignore_index=-1)  # shift due to -1 PAD_VAL
-
-        loss_args = F.cross_entropy(args_logits[mask.bool()].reshape(-1, self.args_dim), (tgt_args[mask.bool()].reshape(-1).long() + 1),ignore_index=-1)  # shift due to -1 PAD_VAL
+        loss_args = F.cross_entropy(args_logits[mask.bool()].reshape(-1, self.args_dim), (tgt_args[mask.bool()].reshape(-1).long() + 1).clamp(0, 256),ignore_index=-1)  # shift due to -1 PAD_VAL
 
         # loss_cmd = self.weights["loss_cmd_weight"] * loss_cmd
         # loss_args = self.weights["loss_args_weight"] * loss_args

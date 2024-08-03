@@ -59,15 +59,15 @@ class CADGENdataset(data.Dataset):
     
     def __getitem__(self, index):
         data_num = self.file_list[index]
-        cad_path = os.path.join(self.cad_root, data_num+'.npy')
-        #print('cad_path: ',cad_path)
-        cad_data = IO.get(cad_path).astype(np.float32)
-        #print('debug-------------------------------------')
-        cad_data = self.random_sample(cad_data, self.sample_points_num)
-        #print('debug-------------------------------------')
-        cad_data = self.pc_norm(cad_data)
-        cad_data = torch.from_numpy(cad_data).float()
-        
+        # cad_path = os.path.join(self.cad_root, data_num+'.npy')
+        # #print('cad_path: ',cad_path)
+        # cad_data = IO.get(cad_path).astype(np.float32)
+        # #print('debug-------------------------------------')
+        # cad_data = self.random_sample(cad_data, self.sample_points_num)
+        # #print('debug-------------------------------------')
+        # cad_data = self.pc_norm(cad_data)
+        # cad_data = torch.from_numpy(cad_data).float()
+        cad_data = torch.zeros(1, 1, 1)
         h5_path = os.path.join(self.h5_root, data_num+'.h5') 
         with h5py.File(h5_path, "r") as fp:
             cad_vec = fp["vec"][:] # (len, 1 + N_ARGS)
@@ -101,6 +101,7 @@ class CADGENdataset(data.Dataset):
         # print('data_num: ',data_num)
         #print(command,paramaters)
         #data = {'data':(front_pic,top_pic,side_pic,cad_data,command,paramaters),'id':data_num}
+        print('data_num: ',data_num)
         data = (front_pic,top_pic,side_pic,cad_data,command,paramaters, data_num)
         #print('data_num: ',data_num)
         return data

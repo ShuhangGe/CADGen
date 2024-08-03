@@ -51,6 +51,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr', type=float, default=config.LR, help='learning rate')
     parser.add_argument('--epochs',type = int, default = config.EPOCH)
     parser.add_argument('--num_works', type=int, default=config.NUM_WORKS, help='number of cpu')
+    parser.add_argument('--epoch',type = int, default = config.EPOCH)
     parser.add_argument('--train_batch', type=int, default=config.TRAIN_BATCH)
     parser.add_argument('--test_batch', type=int, default=config.TEST_BATCH)
     parser.add_argument('--data_root', type=str, default=config.DATA_ROOT, help='train and test data list, in txt format')  

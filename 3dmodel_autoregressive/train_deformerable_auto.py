@@ -156,19 +156,15 @@ def main():
     train_num  = 0
     writer = SummaryWriter(args.log_path)
     best_test = 100000
-    #print('44444444444444444444444444444444444444444444444')
     for epoch in range(args.epochs):
         loss_cmd_train = 0
         loss_args_train = 0
         train_num = 0
         loss_sum = 0
-        #print('5555555555555555555555555555555555555555555555555')
-        for index, data in enumerate(train_loader,0):
-            #print('000000000000000000000000000000000')
-            
+        for index, data in enumerate(train_loader,0):            
             model.train()
             front_pic,top_pic,side_pic,cad_data,command,paramaters,data_num= data
-            print('data_id: ', data_num)
+            #print('data_id: ', data_num)
             front_pic = front_pic.to(args.device)
             top_pic = top_pic.to(args.device)
             side_pic = side_pic.to(args.device)
@@ -180,50 +176,33 @@ def main():
             tgt_commands = command[:,1:]
             #print('tgt_commands.shape: ',tgt_commands.shape)
             tgt_paramaters = paramaters[:,1:,:]
-            #print('tgt_paramaters.shape: ',tgt_paramaters.shape)
-            # print('train_command.shape: ',train_command.shape)
-            # print('train_paramaters.shape: ',train_paramaters.shape)
-            # print('tgt_commands.shape: ',tgt_commands.shape)
-            # print('tgt_paramaters.shape: ',tgt_paramaters.shape)
-            # print('train_command: ',train_command)
-            # print('tgt_commands: ',tgt_commands)
             '''cad_data.shape:  torch.Size([50, 1024, 3])'''
-            #print('5555555555555555555555555555555555555555')
             with autocast():
                 output = model(front_pic,top_pic,side_pic,cad_data,train_command,train_paramaters)
                 #print('output: ',output)
-                #print('6666666666666666666666666666666666666666')
                 output["tgt_commands"] = tgt_commands
                 output["tgt_args"] = tgt_paramaters
                 loss_dict = loss_fun(output)
-            # with autocast():
-                
+
             print('epoch: ',epoch, 'len(train_loader): ',len(train_loader),'index: ',index)
             loss_cmd_train += loss_dict["loss_cmd"]
             loss_args_train += loss_dict["loss_args"]
             train_num += 1
-            #print('sum(loss_dict.values()): ',sum(loss_dict.values()))
-            #print('loss_dict.values(): ',loss_dict.values())
             loss = sum(loss_dict.values())
             print('loss: ',loss)
             loss_sum = loss_sum +loss
-            print('loss_cmd_train: ',loss_dict["loss_cmd"], 'loss_args_train: ',loss_dict["loss_args"])
+            # print('loss_cmd_train: ',loss_dict["loss_cmd"], 'loss_args_train: ',loss_dict["loss_args"])
             assert torch.isnan(loss).sum() == 0, print('loss: ',loss)
-            
+
+            writer.add_scalar(f'loss_cmd_train_{args.lr}', loss_dict["loss_cmd"], global_step=index+epoch*len(train_loader))
+            writer.add_scalar(f'loss_args_train_{args.lr}', loss_dict["loss_args"], global_step=index+epoch*len(train_loader))
+            writer.add_scalar(f'loss_sum_{args.lr}', loss, global_step=index+epoch*len(train_loader))
+
             optimizer.zero_grad()
             # with torch.autograd.detect_anomaly():
             loss.backward()
-            torch.nn.utils.clip_grad_norm(model.parameters(), max_norm=20, norm_type=2)
+            # torch.nn.utils.clip_grad_norm(model.parameters(), max_norm=20, norm_type=2)
 
-            #logname = '/scratch/sg7484/CMDGen/results/paramaters' + f'/log_{index}.log'
-            #log = Logger(logname,level='debug')
-
-            # for name, param in model.named_parameters():
-            #     #log.logger.info(f'-->name: {name}, -->grad_requirs: {param.requires_grad},-->grad_value: {param.grad},\n')
-            #     if not torch.isfinite(param.grad).all():
-            #         print(name, torch.isfinite(param.grad).all())
-            
-            #torch.save(model.state_dict(), f'/scratch/sg7484/CMDGen/results/paramaters/paramater_{index}')
             optimizer.step()
             #torch.save(model.state_dict(), f'/scratch/sg7484/CMDGen/results/paramaters/paramater_after_{index}')
        
@@ -231,9 +210,9 @@ def main():
         loss_args_train = loss_args_train/train_num
         loss_sum = loss_sum/train_num     
         print('loss_train_sum: ',loss_sum)
-        writer.add_scalar(f'loss_cmd_train_{args.lr}', loss_cmd_train, global_step=epoch)
-        writer.add_scalar(f'loss_args_train_{args.lr}', loss_args_train, global_step=epoch)
-        writer.add_scalar(f'loss_sum_{args.lr}', loss_sum, global_step=epoch)
+        writer.add_scalar(f'loss_cmd_train_total{args.lr}', loss_cmd_train, global_step=epoch)
+        writer.add_scalar(f'loss_args_train_total{args.lr}', loss_args_train, global_step=epoch)
+        writer.add_scalar(f'loss_sum_total{args.lr}', loss_sum, global_step=epoch)
         if isinstance(scheduler, list):
             for item in scheduler:
                 item.step(epoch)

@@ -1,3 +1,4 @@
+'''get command as input and generate paramaters from a guassian distribution'''
 import argparse
 import numpy as np
 import torch
@@ -8,11 +9,18 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.autograd import Variable,Function
 import time
 import torchvision
-from models_parameter_mask import MaskedAutoencoderViT
+from model_decoder import MaskedAutoencoderViT
 import config
 from macro import *
 from loss import CADLoss
 import torch.nn.functional as F
+import logging
+
+logging.basicConfig(level=logging.INFO,  
+                    filename='/scratch/sg7484/CADGen/bulletpoints/mae_cad/main_deocder.log',
+                    filemode='a', 
+                    format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s',
+                    )
 class CrossEntropyLoss(torch.nn.Module):
     def __init__(self, reduction='mean'):
         super(CrossEntropyLoss, self).__init__()
@@ -110,7 +118,16 @@ if __name__ == '__main__':
     optimizer = torch.optim.AdamW(model.parameters(), lr=LR, betas=(0.9, 0.95))
     loss_fun = CADLoss(args).to(device)
     model = model.to(device)
-    
+    print('model: ', model)
+    # load model paramaters 
+    pretrained_dict=torch.load('/scratch/sg7484/CADGen/bulletpoints/mae_cad/output_loss_0_256/1e-5/model/MAE_CAD_1377_0.3535327571825903.path')
+    model_dict=model.state_dict()
+    # 1. filter out unnecessary keys
+    pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
+    # 2. overwrite entries in the existing state dict
+    model_dict.update(pretrained_dict)
+    model.load_state_dict(model_dict)
+    print('model loaded')
     print('start train')
     total_length = len(train_loader)
     writer = SummaryWriter(log_dir)
@@ -121,67 +138,54 @@ if __name__ == '__main__':
             print(f'train: total length: {total_length}, index: {index}')
             # model.train()
             command, paramaters, data_num = data
-            # print('command.shape: ',command.shape)
-            # print('paramaters.shape: ',paramaters.shape)
-            # print('command: ',command)
             bool_matrix = (command == 5)
             index = torch.nonzero(bool_matrix)
-            # print('index: ',index)
-            # print('bool_matrix: ',bool_matrix)
-            
             '''command.shape:  torch.Size([512, 64])
                 paramaters.shape:  torch.Size([512, 64, 16])'''
-            command, paramaters = command.to(device),paramaters.to(device)
-            optimizer.zero_grad()
-            output, mask = model(command, paramaters)
+            command, paramaters = command.to(device), paramaters.to(device)
+            output = model(command)
             '''pred.shape:  torch.Size([512, 64, 6])
             mask.shape:  torch.Size([512, 64])'''
             output["tgt_commands"] = command
             output["tgt_args"] = paramaters
             output["command_logits"] = command.type(torch.float32)
-            loss = loss_fun(output)
-            print('loss: ',loss)
-            # loss = loss_dict.values()
-            loss.backward()
-            optimizer.step()
-            writer.add_scalar('loss_train',loss.item(),global_step=epoch)
-            print('loss_train',loss.item())
+            # loss = loss_fun(output)
 
-        average_loss = 0
-        test_loss = 0.0
-        test_total = 0
-        total_length = len(test_loader)
-        with torch.no_grad():
-            for index, data in enumerate(test_loader):
-                print(f'test: total length: {total_length}, index: {index}')
-                model.eval()
-                command, paramaters, data_num = data
-                command, paramaters = command.to(device),paramaters.to(device)
-                output, mask = model(command, paramaters)
-                '''pred.shape:  torch.Size([512, 64, 6])
-                mask.shape:  torch.Size([512, 64])'''
-                output["tgt_commands"] = command
-                output["tgt_args"] = paramaters
-                output["command_logits"] = command.type(torch.float32)
-                loss = loss_fun(output)
-                print('loss: ',loss)        
-                test_loss += loss.item()
-                # print('loss',loss)
-        average_loss = test_loss/(index+1)
-        # print('average_loss',average_loss)
-        writer.add_scalar('average_loss', average_loss, global_step=epoch)
-        print('average_loss: ',average_loss)
-        if average_loss<best_test:
-            best_test = average_loss
-            if not os.path.exists(model_dir):
-                os.makedirs(model_dir)
-            model_path = os.path.join(model_dir, f'MAE_CAD_{epoch}_{average_loss}.path')
-            torch.save(model.state_dict(), model_path)
+    #     average_loss = 0
+    #     test_loss = 0.0
+    #     test_total = 0
+    #     total_length = len(test_loader)
+    #     with torch.no_grad():
+    #         for index, data in enumerate(test_loader):
+    #             print(f'test: total length: {total_length}, index: {index}')
+    #             model.eval()
+    #             command, paramaters, data_num = data
+    #             command, paramaters = command.to(device),paramaters.to(device)
+    #             output, mask = model(command, paramaters)
+    #             '''pred.shape:  torch.Size([512, 64, 6])
+    #             mask.shape:  torch.Size([512, 64])'''
+    #             output["tgt_commands"] = command
+    #             output["tgt_args"] = paramaters
+    #             output["command_logits"] = command.type(torch.float32)
+    #             loss = loss_fun(output)
+    #             print('loss: ',loss)        
+    #             test_loss += loss.item()
+    #             # print('loss',loss)
+    #     average_loss = test_loss/(index+1)
+    #     # print('average_loss',average_loss)
+    #     writer.add_scalar('average_loss', average_loss, global_step=epoch)
+    #     print('average_loss: ',average_loss)
+    #     if average_loss<best_test:
+    #         best_test = average_loss
+    #         if not os.path.exists(model_dir):
+    #             os.makedirs(model_dir)
+    #         model_path = os.path.join(model_dir, f'MAE_CAD_{epoch}_{average_loss}.path')
+    #         torch.save(model.state_dict(), model_path)
 
-    if not os.path.exists(model_dir):
-        os.makedirs(model_dir)
-    model_path = os.path.join(model_dir, f'MAE_CAD_last_{epoch}.path')
-    torch.save(model.state_dict(), model_path)
+    # if not os.path.exists(model_dir):
+    #     os.makedirs(model_dir)
+    # model_path = os.path.join(model_dir, f'MAE_CAD_last_{epoch}.path')
+    # torch.save(model.state_dict(), model_path)
 
 
 

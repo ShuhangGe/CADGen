@@ -25,6 +25,7 @@ from model_utils import _make_seq_first, _make_batch_first, \
 from layers.transformer import *
 from layers.improved_transformer import *
 from layers.positional_encoding import *
+
 class CADEmbedding(nn.Module):
     """Embedding: positional embed + command embed + parameter embed + group embed (optional)"""
     def __init__(self, args, seq_len, use_group=False):
@@ -79,23 +80,16 @@ class MaskedAutoencoderViT(nn.Module):
         self.mask_ratio = mask_ratio
         self.max_len = args.max_total_len
         self.pos_embed = nn.Parameter(torch.zeros(1, self.max_len, embed_dim), requires_grad=False)  # fixed sin-cos embedding
-        if args.device == 'cpu':
-            self.device = torch.device("cpu")
-        else:
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
         self.blocks = nn.ModuleList([
             Block(embed_dim, num_heads, mlp_ratio, qkv_bias=True, qk_scale=None, norm_layer=norm_layer)
             for i in range(depth)])
         self.norm = norm_layer(embed_dim)
-        self.embedding = CADEmbedding(args, args.max_total_len)
-        
-        encoder_layer = TransformerEncoderLayerImproved(args.embed_dim, args.num_heads, args.dim_feedforward, args.dropout)
-        encoder_norm = LayerNorm(args.embed_dim)
-        self.encoder = TransformerEncoder(encoder_layer, args.depth, encoder_norm)
+
         # --------------------------------------------------------------------------
         # MAE decoder specifics
         self.decoder_embed = nn.Linear(embed_dim, decoder_embed_dim, bias=True)
-        self.decoder_command = nn.Linear(embed_dim, decoder_embed_dim, bias=True)
+
         self.mask_token = nn.Parameter(torch.zeros(1, 1, decoder_embed_dim))
 
         self.decoder_pos_embed = nn.Parameter(torch.zeros(1, self.max_len, decoder_embed_dim), requires_grad=False)  # fixed sin-cos embedding
@@ -114,9 +108,11 @@ class MaskedAutoencoderViT(nn.Module):
         # self.text_encoder = Text_Encoder(args)
         self.args = args.n_commands
         self.embed_dim =embed_dim
+        self.text_encoder = nn.Linear(args.n_args+1, embed_dim)
+        # self.command_encoder = nn.Linear(1, embed_dim)
+        # self.paramater_encoder = nn.Linear(args.n_args, embed_dim)
+        self.embedding = CADEmbedding(args, args.max_total_len)
 
-        self.fcn = FCN(decoder_embed_dim, args.n_commands, args.n_args)
-        
     def initialize_weights(self):
         # initialization
         # initialize (and freeze) pos_embed by sin-cos embedding
@@ -139,7 +135,7 @@ class MaskedAutoencoderViT(nn.Module):
             nn.init.constant_(m.bias, 0)
             nn.init.constant_(m.weight, 1.0)
 
-    def random_masking(self, x, commmand_embed, padding_mask, key_padding_mask, mask_ratio):
+    def random_masking(self, x, mask_ratio):
         """
         Perform per-sample random masking by per-sample shuffling.
         Per-sample shuffling is done by argsort random noise.
@@ -156,11 +152,7 @@ class MaskedAutoencoderViT(nn.Module):
 
         # keep the first subset
         ids_keep = ids_shuffle[:, :len_keep]
-        ids_masked = ids_shuffle[:, len_keep:]
-        command_masked = torch.gather(commmand_embed, dim=1, index=ids_masked.unsqueeze(-1).repeat(1, 1, D))
-        x_keep = torch.gather(x, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, D))
-        key_padding_mask_keep = torch.gather(key_padding_mask.unsqueeze(-1), dim=1, index=ids_keep.unsqueeze(-1))
-        padding_mask_keep = torch.gather(padding_mask.unsqueeze(-1), dim=1, index=ids_keep.unsqueeze(-1))
+        x_masked = torch.gather(x, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, D))
 
         # generate the binary mask: 0 is keep, 1 is remove
         mask = torch.ones([N, L], device=x.device)
@@ -168,95 +160,118 @@ class MaskedAutoencoderViT(nn.Module):
         # unshuffle to get the binary mask
         mask = torch.gather(mask, dim=1, index=ids_restore)
 
-        return x_keep, mask, ids_restore, command_masked, padding_mask_keep, key_padding_mask_keep
+        return x_masked, mask, ids_restore
 
-    def forward_encoder(self, commmand, paramaters, mask_ratio):
+    def forward_encoder(self, command, paramaters, mask_ratio):
         # # embed patches
-        '''commmand.shape:  torch.Size([10, 64])
-            paramaters.shape:  torch.Size([10, 64, 16])'''
-        padding_mask, key_padding_mask = _get_padding_mask(commmand, seq_dim=-1), _get_key_padding_mask(commmand, seq_dim=-1)
-        # print('padding_mask.shape: ',padding_mask.shape)
-        # print('key_padding_mask.shape: ',key_padding_mask.shape)
-        '''
-        padding_mask.shape:  torch.Size([10, 64])
-            key_padding_mask.shape:  torch.Size([10, 64])
-        padding_mask.shape:  torch.Size([64, 10, 1])
-            key_padding_mask.shape:  torch.Size([10, 64])'''
-        #padding_indicate = torch.sum(padding_mask,dim=-1)
-        x, commmand_embed= self.embedding(commmand, paramaters)
-        '''text.shape:  torch.Size([20, 64, 256])'''
+        # x = self.patch_embed(x)
+        padding_mask, key_padding_mask = _get_padding_mask(command, seq_dim=-1), _get_key_padding_mask(command, seq_dim=-1)
+        print('command.shape: ',command.shape)
+        x, command_embed= self.embedding(command, paramaters)
+        # # add pos embed w/o cls token
         x = x + self.pos_embed[:, :, :]
 
         # masking: length -> length * mask_ratio
-        x, mask, ids_restore, command_masked, padding_mask_keep, key_padding_mask_keep= self.random_masking(x, commmand_embed, padding_mask, key_padding_mask, mask_ratio)
-        # print('x.shape: ',x.shape)
-        padding_mask_keep = padding_mask_keep.permute(1,0,2)
-        key_padding_mask_keep = key_padding_mask_keep.squeeze(-1)
-        # apply Transformer blocks
-        # for blk in self.blocks:
-        #     x = blk(x)
-        # x = self.norm(x)
-        # print('key_padding_mask_keep.shape: ',key_padding_mask_keep.shape)
-        x = x.permute(1,0,2)
-        x = self.encoder(x, mask=None, src_key_padding_mask=key_padding_mask_keep)
-        # print('x0.shape: ',x.shape)
-        '''x0.shape:  torch.Size([48(sequence length), 10(batch size), 256])'''
-        # print('padding_mask_keep.shape: ',padding_mask_keep.shape)
-        x = self.norm(x)
-        x = x.permute(1,0,2)
-        # print('x1.shape: ',x.shape)
-        return x, mask, ids_restore,command_masked
+        x, mask, ids_restore = self.random_masking(x, mask_ratio)
+        #print('x.shape: ',x.shape)
+        '''x.shape:  torch.Size([20(batchsize), 16(patch after mask), 256])'''
 
-    def forward_decoder(self, x, ids_restore,commmand_embed):
+        # # append cls token
+        # cls_token = self.cls_token + self.pos_embed[:, :1, :]
+        # cls_tokens = cls_token.expand(x.shape[0], -1, -1)
+        # x = torch.cat((cls_tokens, x), dim=1)
+
+        # apply Transformer blocks
+        for blk in self.blocks:
+            x = blk(x)
+        x = self.norm(x)
+
+        return x, mask, ids_restore
+
+    def forward_decoder(self, x, ids_restore):
         # embed tokens
-        print('x.shape: ',x.shape)
-        '''torch.Size([256, 48, 256])'''
         x = self.decoder_embed(x)
-        temp = torch.zeros(1, 1, x.shape[-1]).to(self.device)
-        command_mask  = temp.repeat(x.shape[0], x.shape[1], 1)
-        commmand_embed = self.decoder_command(commmand_embed)
-        '''commmand_embed.shape:  torch.Size([512, 16, 128])'''
+        #print('\nx0.shape: ',x.shape)
         # append mask tokens to sequence
         mask_tokens = self.mask_token.repeat(x.shape[0], ids_restore.shape[1] - x.shape[1], 1)#+1 include cls token 
-        '''mask_tokens.shape:  torch.Size([512, 16, 128])'''
+        #print('mask_tokens.shape: ',mask_tokens.shape)
+        '''mask_tokens.shape:  torch.Size([256, 32, 128])'''
+        # x_ = torch.cat([x[:, 1:, :], mask_tokens], dim=1)  # no cls token
         x_ = torch.cat([x[:, :, :], mask_tokens], dim=1)  # no cls token
-        '''x_0.shape:  torch.Size([512, 64, 128])'''
+        #print('x_0.shape: ',x_.shape)
+        '''x_0.shape:  torch.Size([256, 64, 128])'''
         x = torch.gather(x_, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x.shape[2]))  # unshuffle
-        '''x_0.shape:  torch.Size([512, 64, 128])'''
-
-        commmand_embed = torch.cat([command_mask, commmand_embed], dim=1)
-        commmand_embed = torch.gather(commmand_embed, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x.shape[2]))
+        #print('x_1.shape: ',x_.shape)
+        '''x_1.shape:  torch.Size([256, 64, 128])'''
+        # x = torch.cat([x[:, :1, :], x_], dim=1)  # append cls token
+        #print('self.decoder_pos_embed.shape: ',self.decoder_pos_embed.shape)
         # add pos embed
         x = x + self.decoder_pos_embed
-        x = x + commmand_embed
+
         # apply Transformer blocks
         for blk in self.decoder_blocks:
             x = blk(x)
         x = self.decoder_norm(x)
-        # print('x1.shape: ',x.shape)
+        #print('x1.shape: ',x.shape)
         # predictor projection
-        args_logits = self.fcn(x)
-        #print('args_logits.shape: ',args_logits.shape)
-        #torch.Size([128, 64, 16, 257])
-        res = { 
-            "args_logits": args_logits
-        }        
-        return res
+        x =F.sigmoid(self.decoder_pred(x)) 
+        #print('x2.shape: ',x.shape)
+        # # remove cls token
+        # x = x[:, 1:, :]
 
+        return x
+
+    def forward_loss(self, command, pred, mask):
+        """
+        imgs: [N, 3, H, W]
+        pred: [N, L, p*p*3]
+        mask: [N, L], 0 is keep, 1 is remove, 
+        """
+        # print('command.shape: ',command.shape)
+        # print('pred.shape: ',pred.shape)
+        # print('mask.shape: ',mask.shape)
+        '''command.shape:  torch.Size([20, 64])
+            pred.shape:  torch.Size([20, 64, 6])
+            mask.shape:  torch.Size([20, 64])'''
+        command = F.one_hot(command, num_classes=6)
+        # print('command.shape: ',command.shape)
+        if self.norm_pix_loss:
+            mean = target.mean(dim=-1, keepdim=True)
+            var = target.var(dim=-1, keepdim=True)
+            target = (target - mean) / (var + 1.e-6)**.5
+
+        loss = (pred - command) ** 2
+        loss = loss.mean(dim=-1)  # [N, L], mean loss per patch
+
+        loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
+        #print('loss: ',loss)
+        return loss
 
     def forward(self, command, paramaters, mask_ratio=0.75):
         mask_ratio = self.mask_ratio
-        # text = self.text_encoder(command, paramaters,self.pos_embed)
-        #expand one dimension to command
-        latent, mask, ids_restore, command_masked= self.forward_encoder(command, paramaters, mask_ratio)
+        # command and paramaters embedding
+        # command = command.unsqueeze(-1)
+        command = command.type(torch.float32)
+        paramaters = paramaters.type(torch.float32)
+        # commmand_embed = self.command_encoder(command)
+        # paramater_embed = self.paramater_encoder(paramaters)
+        # text = commmand_embed + paramater_embed
+        #print('text.shape: ',text.shape)
+        '''text.shape:  torch.Size([20, 64, 256])'''
+        latent, mask, ids_restore = self.forward_encoder(command, paramaters, mask_ratio)
         #print('latent.shape: ',latent.shape)
         #print('mask.shape: ',mask.shape)
         #print('ids_restore.shape: ',ids_restore.shape)
         '''latent.shape:  torch.Size([20, 16, 256])
             mask.shape:  torch.Size([20, 64])
             ids_restore.shape:  torch.Size([20, 64])'''
-        pred = self.forward_decoder(latent, ids_restore, command_masked)  # [N, L, p*p*3]
-        # loss_dict = loss_fun(output)
+        pred = self.forward_decoder(latent, ids_restore)  # [N, L, p*p*3]
+        #print('pred.shape: ',pred.shape)
+        '''pred.shape:  torch.Size([20, 64, 6])'''
+        # loss = self.forward_loss(command, pred, mask)
+        # logging.info(f'loss: {loss.item()}')
+        #print('pred: ',pred)
+        #print('loss: ',loss)
         return pred, mask
 
 

@@ -22,7 +22,7 @@ class IO:
     # References: https://github.com/numpy/numpy/blob/master/numpy/lib/format.py
     @classmethod
     def _read_npy(cls, file_path):
-        return np.load(file_path)
+        return np.load(file_path,allow_pickle=True)
        
     # References: https://github.com/dimatura/pypcd/blob/master/pypcd/pypcd.py#L275
     # Support PCD files without compression ONLY!

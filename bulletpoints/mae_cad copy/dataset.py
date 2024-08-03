@@ -44,27 +44,8 @@ class CADGENdataset(data.Dataset):
             cad_vec = fp["vec"][:] # (len, 1 + N_ARGS)
         # print('cad_vec.shape[0]: ',cad_vec.shape[0])
         pad_len = self.max_total_len - cad_vec.shape[0]
-        # print('cad_vec.shape: ',cad_vec.shape)
-        # print('cad_vec1: ',cad_vec[:, 0])
-        extrude_padding = 0
-        for index, c in enumerate(cad_vec):
-            # print('index: ',index)
-            # print('extrude_padding: ',extrude_padding)
-            #get the shape of cad_vac
-            # print('cad_vec.size(): ',cad_vec.shape)
-            # print('c: ',c)
-            # print('c[0]: ',c[0])
-            if c[0]==5:
-                cad_vec = np.delete(cad_vec,index-extrude_padding, axis = 0)
-                extrude_padding += 1
-        # print('cad_vec2: ',cad_vec[:, 0])
-        #cad_vec = cad_vec[:-1,:]
-        # print('cad_vec.shape: ',cad_vec.shape)
-        pad_len += extrude_padding
+
         cad_vec = np.concatenate([cad_vec, EOS_VEC[np.newaxis].repeat(pad_len, axis=0)], axis=0)
-        # print('cad_vec.shape: ',cad_vec.shape)
-        # a= b
-        
         command = cad_vec[:, 0]
         paramaters = cad_vec[:, 1:]
         

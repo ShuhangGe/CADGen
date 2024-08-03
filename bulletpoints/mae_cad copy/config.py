@@ -1,8 +1,8 @@
 LR = 1e-4
-EPOCH = 5000
-NUM_WORKS = 4
-TRAIN_BATCH = 256
-TEST_BATCH = 64
+EPOCH = 5
+NUM_WORKS = 1
+TRAIN_BATCH = 128
+TEST_BATCH = 100
 DEVICE = 'gpu'
 OPTIMIZER = 'amd'
 DATA_ROOT = '/scratch/sg7484/data/CMDGen/Sketch_1_Extrude_1'

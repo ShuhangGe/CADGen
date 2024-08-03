@@ -209,8 +209,6 @@ class MaskedAutoencoderViT(nn.Module):
 
     def forward_decoder(self, x, ids_restore,commmand_embed):
         # embed tokens
-        print('x.shape: ',x.shape)
-        '''torch.Size([256, 48, 256])'''
         x = self.decoder_embed(x)
         temp = torch.zeros(1, 1, x.shape[-1]).to(self.device)
         command_mask  = temp.repeat(x.shape[0], x.shape[1], 1)
@@ -236,8 +234,6 @@ class MaskedAutoencoderViT(nn.Module):
         # print('x1.shape: ',x.shape)
         # predictor projection
         args_logits = self.fcn(x)
-        #print('args_logits.shape: ',args_logits.shape)
-        #torch.Size([128, 64, 16, 257])
         res = { 
             "args_logits": args_logits
         }        
@@ -248,7 +244,7 @@ class MaskedAutoencoderViT(nn.Module):
         mask_ratio = self.mask_ratio
         # text = self.text_encoder(command, paramaters,self.pos_embed)
         #expand one dimension to command
-        latent, mask, ids_restore, command_masked= self.forward_encoder(command, paramaters, mask_ratio)
+        latent, mask, ids_restore,command_masked= self.forward_encoder(command, paramaters, mask_ratio)
         #print('latent.shape: ',latent.shape)
         #print('mask.shape: ',mask.shape)
         #print('ids_restore.shape: ',ids_restore.shape)
