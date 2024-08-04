@@ -21,6 +21,22 @@ logging.basicConfig(level=logging.INFO,
                     filemode='a', 
                     format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s',
                     )
+
+def logits2vec(outputs, refill_pad=True, to_numpy=True):
+    """network outputs (logits) to final CAD vector"""
+    out_command = torch.argmax(torch.softmax(outputs['command_logits'], dim=-1), dim=-1)  # (N, S)
+    out_args = torch.argmax(torch.softmax(outputs['args_logits'], dim=-1), dim=-1) - 1  # (N, S, N_ARGS)
+    if refill_pad: # fill all unused element to -1
+        mask = ~torch.tensor(CMD_ARGS_MASK).bool().cuda()[out_command.long()]
+        # print('out_args.shape: ',out_args.shape)
+        # print('mask.shape: ',mask.shape)
+        out_args[mask] = -1
+
+    out_cad_vec = torch.cat([out_command.unsqueeze(-1), out_args], dim=-1)
+    if to_numpy:
+        out_cad_vec = out_cad_vec.detach().cpu().numpy()
+    return out_cad_vec
+
 class CrossEntropyLoss(torch.nn.Module):
     def __init__(self, reduction='mean'):
         super(CrossEntropyLoss, self).__init__()
@@ -144,49 +160,31 @@ if __name__ == '__main__':
                 paramaters.shape:  torch.Size([512, 64, 16])'''
             command, paramaters = command.to(device), paramaters.to(device)
             output = model(command)
-            '''pred.shape:  torch.Size([512, 64, 6])
-            mask.shape:  torch.Size([512, 64])'''
-            output["tgt_commands"] = command
-            output["tgt_args"] = paramaters
-            output["command_logits"] = command.type(torch.float32)
-            # loss = loss_fun(output)
+            command_out = F.one_hot(command, num_classes=6)
+            # print('command_out.shape: ',command_out.shape) 
+            output["command_logits"] = command_out.type(torch.float32)
 
-    #     average_loss = 0
-    #     test_loss = 0.0
-    #     test_total = 0
-    #     total_length = len(test_loader)
-    #     with torch.no_grad():
-    #         for index, data in enumerate(test_loader):
-    #             print(f'test: total length: {total_length}, index: {index}')
-    #             model.eval()
-    #             command, paramaters, data_num = data
-    #             command, paramaters = command.to(device),paramaters.to(device)
-    #             output, mask = model(command, paramaters)
-    #             '''pred.shape:  torch.Size([512, 64, 6])
-    #             mask.shape:  torch.Size([512, 64])'''
-    #             output["tgt_commands"] = command
-    #             output["tgt_args"] = paramaters
-    #             output["command_logits"] = command.type(torch.float32)
-    #             loss = loss_fun(output)
-    #             print('loss: ',loss)        
-    #             test_loss += loss.item()
-    #             # print('loss',loss)
-    #     average_loss = test_loss/(index+1)
-    #     # print('average_loss',average_loss)
-    #     writer.add_scalar('average_loss', average_loss, global_step=epoch)
-    #     print('average_loss: ',average_loss)
-    #     if average_loss<best_test:
-    #         best_test = average_loss
-    #         if not os.path.exists(model_dir):
-    #             os.makedirs(model_dir)
-    #         model_path = os.path.join(model_dir, f'MAE_CAD_{epoch}_{average_loss}.path')
-    #         torch.save(model.state_dict(), model_path)
-
-    # if not os.path.exists(model_dir):
-    #     os.makedirs(model_dir)
-    # model_path = os.path.join(model_dir, f'MAE_CAD_last_{epoch}.path')
-    # torch.save(model.state_dict(), model_path)
-
-
-
-
+            out_cad_vec = logits2vec(output)
+            
+            gt_vec = torch.cat([command.unsqueeze(-1), paramaters], dim=-1).squeeze(1).detach().cpu().numpy()
+            batch_size = command.shape[0]
+            save_root = '/scratch/sg7484/CADGen/bulletpoints/mae_cad/decoder_result'
+            # for index, i in enumerate(all_command):
+            #     i.astype(int)
+            #     np.savetxt(f'/scratch/sg7484/CADGen/bulletpoints/mae_cad/decoder_result/{index}.txt',i)
+            for j in range(batch_size):
+                out_vec = out_cad_vec[j]
+                seq_len = command[j].tolist().index(EOS_IDX)
+                data_id = epoch*batch_size+j
+                save_path = os.path.join(save_root, '{}_vec.h5'.format(data_id))
+                print('save_path: ',save_path)
+                with h5py.File(save_path, 'w') as fp:
+                    fp.create_dataset('out_vec', data=out_vec[:seq_len], dtype=np.int)
+                    fp.create_dataset('gt_vec', data=gt_vec[j][:seq_len], dtype=np.int)
+                #print('out_vec.shape: ',out_vec.shape)
+                #print('gt_vec.shape: ',gt_vec.shape)
+                np.savetxt(os.path.join(save_root,f'{data_id}_out_vec.txt'), out_vec[:seq_len])
+                np.savetxt(os.path.join(save_root,f'{data_id}_gt_vec.txt'), gt_vec[j][:seq_len])
+                out_count += 1
+                if out_count >= out_num:
+                    break

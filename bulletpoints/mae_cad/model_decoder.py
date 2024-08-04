@@ -129,25 +129,7 @@ class MaskedAutoencoderViT(nn.Module):
 
         args_logits = self.fcn(x)
 
-        '''args_logits:  torch.Size([256, 64, 16, 257])'''
-        # print('commands1.shape',commands.shape)
-        paramaters = F.softmax(args_logits,dim=-1)
-        paramaters = torch.argmax(paramaters,dim=-1)
-        commands = commands.unsqueeze(-1)
-        # print('paramaters.shape: ',paramaters.shape)
-        # print('commands2.shape: ',commands.shape)
-        '''commands1.shape torch.Size([256, 64])
-        paramaters.shape:  torch.Size([256, 64, 16])
-        commands2.shape:  torch.Size([256, 64, 1])'''
-        # print('paramaters.shape',paramaters.shape)
-        '''command: [50, 60, 1]  paramaters: [50, 60, 16]'''
-        allcommand = torch.cat((commands, paramaters),dim=-1)
-        all_command = allcommand[0:10,:,:]
-        all_command = all_command.cpu().detach().numpy()
-        #save one_command to one_command.txt
-        for index, i in enumerate(all_command):
-            i.astype(int)
-            np.savetxt(f'/scratch/sg7484/CADGen/bulletpoints/mae_cad/decoder_result/{index}.txt',i)
+
       
         res = { 
             "args_logits": args_logits
