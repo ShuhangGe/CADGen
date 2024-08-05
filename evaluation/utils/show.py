@@ -4,8 +4,6 @@ import json
 import h5py
 import numpy as np
 from OCC.Display.SimpleGui import init_display
-from OCC.Display.OCCViewer import OffscreenRenderer
-
 from OCC.Core.gp import gp_Vec, gp_Trsf
 from OCC.Core.TopLoc import TopLoc_Location
 from OCC.Core.BRepCheck import BRepCheck_Analyzer
@@ -41,7 +39,6 @@ def translate_shape(shape, translate):
 
 
 display, start_display, add_menu, add_function_to_menu = init_display()
-local_display = OffscreenRenderer()
 cnt = 0
 for path in out_paths:
     print(path)
@@ -63,25 +60,25 @@ for path in out_paths:
     except Exception as e:
         print("load and create failed.")
         continue
-    
+    # print('out_shape', out_shape)
     if args.filter:
         analyzer = BRepCheck_Analyzer(out_shape)
         if not analyzer.IsValid():
             print("detect invalid.")
             continue
+    # print('out_shape', out_shape)
+    try:
+        out_shape = translate_shape(out_shape, [0, 2 * (cnt % 10), 2 * (cnt // 10)])
+        if args.form == "h5" and args.with_gt:
+            gt_shape = translate_shape(gt_shape, [-2, 2 * (cnt % 10), 2 * (cnt // 10)])
+            display.DisplayShape([out_shape, gt_shape], update=True)
+        else:
+            display.DisplayShape(out_shape, update=True)
 
-    out_shape = translate_shape(out_shape, [0, 2 * (cnt % 10), 2 * (cnt // 10)])
-    if args.form == "h5" and args.with_gt:
-        gt_shape = translate_shape(gt_shape, [-2, 2 * (cnt % 10), 2 * (cnt // 10)])
-        # display.DisplayShape([out_shape, gt_shape], update=True)
-        local_display.DisplayShape([out_shape, gt_shape], update=True, \
-        dump_image_path='/Users/shuhangge/Desktop/projects/data/temp', dump_image_filename='1.png')
-    else:
-        # display.DisplayShape(out_shape, update=True)
-        local_display.DisplayShape([out_shape, gt_shape], update=True, \
-        dump_image_path='/Users/shuhangge/Desktop/projects/data/temp', dump_image_filename='1.png')
+        cnt += 1
+    except Exception as e:
+        print("display failed.")
+        continue
 
-    cnt += 1
-
-# start_display()
+start_display()
 
