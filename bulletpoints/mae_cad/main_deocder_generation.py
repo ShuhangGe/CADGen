@@ -15,7 +15,7 @@ from macro import *
 from loss import CADLoss
 import torch.nn.functional as F
 import logging
-
+import h5py
 logging.basicConfig(level=logging.INFO,  
                     filename='/scratch/sg7484/CADGen/bulletpoints/mae_cad/main_deocder.log',
                     filemode='a', 
@@ -148,10 +148,16 @@ if __name__ == '__main__':
     total_length = len(train_loader)
     writer = SummaryWriter(log_dir)
     best_test = 10000000
+    out_count = 0
+    out_num = 100
     for epoch in range(epochs):
         epoch_start = time.time()
-        for index, data in enumerate(train_loader):
-            print(f'train: total length: {total_length}, index: {index}')
+        if out_count >= out_num:
+            break
+        for idx, data in enumerate(train_loader):
+            if out_count >= out_num:
+                break
+            print(f'train: total length: {total_length}, index: {idx}')
             # model.train()
             command, paramaters, data_num = data
             bool_matrix = (command == 5)
@@ -173,9 +179,11 @@ if __name__ == '__main__':
             #     i.astype(int)
             #     np.savetxt(f'/scratch/sg7484/CADGen/bulletpoints/mae_cad/decoder_result/{index}.txt',i)
             for j in range(batch_size):
+                if out_count >= out_num:
+                    break
                 out_vec = out_cad_vec[j]
                 seq_len = command[j].tolist().index(EOS_IDX)
-                data_id = epoch*batch_size+j
+                data_id = epoch*total_length + idx*batch_size + j
                 save_path = os.path.join(save_root, '{}_vec.h5'.format(data_id))
                 print('save_path: ',save_path)
                 with h5py.File(save_path, 'w') as fp:
@@ -186,5 +194,4 @@ if __name__ == '__main__':
                 np.savetxt(os.path.join(save_root,f'{data_id}_out_vec.txt'), out_vec[:seq_len])
                 np.savetxt(os.path.join(save_root,f'{data_id}_gt_vec.txt'), gt_vec[j][:seq_len])
                 out_count += 1
-                if out_count >= out_num:
-                    break
+
