@@ -4,4 +4,4 @@
 !*.py
 !*.md
 !*.SBATCH
-!.sh
+!*.sh

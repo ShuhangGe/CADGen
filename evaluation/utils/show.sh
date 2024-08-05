@@ -1,0 +1,1 @@
+python show.py --src /Users/shuhangge/Desktop/projects/data/mae_cad_gen/decoder_result  --idx 0 --num 3 --with_gt
