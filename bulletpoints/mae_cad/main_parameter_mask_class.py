@@ -108,6 +108,8 @@ if __name__ == '__main__':
     log_save_path = os.path.join(save_path,'paramaters.log')
     if os.path.exists(log_save_path):
         os.remove(log_save_path)
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
     logging.basicConfig(level=logging.INFO,
                     filename=log_save_path,
                     filemode='a',  

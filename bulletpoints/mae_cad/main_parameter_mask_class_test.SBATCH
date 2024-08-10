@@ -16,4 +16,4 @@ singularity exec --nv \
                             /scratch/work/public/singularity/cuda11.8.86-cudnn8.7-devel-ubuntu22.04.2.sif \
                              /bin/bash -c "source /ext3/env.sh; CUDA_LAUNCH_BLOCKING=1 python main_parameter_mask_class.py \
                              --lr 1e-4 --save_path /scratch/sg7484/CADGen/bulletpoints/mae_cad/output_class/test \
-                             --mask_ratio 0.75 --decoder_depth 8 --decoder_embed_dim 512 --depth 12 --embed_dim 512"
+                             --mask_ratio 0.5 --decoder_depth 8 --decoder_embed_dim 512 --depth 12 --embed_dim 512"
