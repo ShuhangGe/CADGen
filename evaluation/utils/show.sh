@@ -1,1 +1,1 @@
-python show.py --src /home/shuhang/Desktop/CADGen/decoder_result  --idx 5 --num 10
+python show.py --src /home/shuhang/Desktop/CADGen/result/1e-5/alldata_result --idx 0 --num 100 

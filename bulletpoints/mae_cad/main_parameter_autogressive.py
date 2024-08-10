@@ -13,6 +13,7 @@ import config
 from macro import *
 from loss import CADLoss
 import torch.nn.functional as F
+import logging
 class CrossEntropyLoss(torch.nn.Module):
     def __init__(self, reduction='mean'):
         super(CrossEntropyLoss, self).__init__()
@@ -69,11 +70,11 @@ if __name__ == '__main__':
     parser.add_argument('--depth', type=int, default=12, help='depth of encoder')
     parser.add_argument('--num_heads', type=int, default=16, help='num_heads of encoder')
     #deocder
-    parser.add_argument('--decoder_embed_dim', type=int, default=128)
-    parser.add_argument('--decoder_depth', type=int, default=8)
-    parser.add_argument('--decoder_num_heads', type=int, default=16)
-    parser.add_argument('--mlp_ratio', type=float, default=4.)
-    parser.add_argument('--args_dim', type=int, default=256)
+    # parser.add_argument('--decoder_embed_dim', type=int, default=128)
+    # parser.add_argument('--decoder_depth', type=int, default=8)
+    # parser.add_argument('--decoder_num_heads', type=int, default=16)
+    # parser.add_argument('--mlp_ratio', type=float, default=4.)
+    # parser.add_argument('--args_dim', type=int, default=256)
 
     #bert decoder
     parser.add_argument('--args_dim', type=int, default=ARGS_DIM)#
@@ -88,6 +89,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_decoder_layers_transdecoder', type=int, default=6)
     parser.add_argument('--dim_feedforward_transdecoder', type=int, default=2048)
     parser.add_argument('--dropout_transdecoder', type=int, default=0.1)
+    parser.add_argument('--d_model', type=int, default=256)#
     #beam search
     parser.add_argument('--num_beam', type=int, default=6)
 
@@ -118,12 +120,17 @@ if __name__ == '__main__':
                                                num_workers=args.num_works)
     print('data ready')
     
-    model = MaskedAutoencoderViT(args,mask_ratio=args.mask_ratio, embed_dim=args.embed_dim, depth=args.depth, num_heads=args.num_heads,
-                 decoder_embed_dim=args.decoder_embed_dim, decoder_depth=args.decoder_depth, decoder_num_heads=args.decoder_num_heads,
-                 mlp_ratio=args.mlp_ratio)
+    model = MaskedAutoencoderViT(args = args, mask_ratio=args.mask_ratio, embed_dim=args.embed_dim, depth=args.depth, num_heads=args.num_heads)
+    
+    logging.basicConfig(level=logging.INFO,
+                    filename=os.path.join(save_path,'paramaters.log'),
+                    filemode='a',  
+                    format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s'
+                    )
     for arg in vars(args):
-        print(arg, ':', getattr(args, arg))
-    print('model:',model)
+        logging.info(f'{arg} : {getattr(args, arg)}')
+    logging.info(f'model:{model}')
+    
     optimizer = torch.optim.AdamW(model.parameters(), lr=LR, betas=(0.9, 0.95))
     loss_fun = CADLoss(args).to(device)
     model = model.to(device)

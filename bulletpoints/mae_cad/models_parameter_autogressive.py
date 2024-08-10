@@ -426,46 +426,43 @@ class MaskedAutoencoderViT(nn.Module):
         num_decoder_layers_transdecoder = args.num_decoder_layers_transdecoder
         dim_feedforward_transdecoder = args.dim_feedforward_transdecoder
         dropout_transdecoder = args.dropout_transdecoder
-        self.cad_pro = nn.Linear(3,args.d_model*3)
-        self.text_encoder = Text_Encoder(args)
 
         decoder_layer = MyTransformerDecoderLayer(d_model_transdecoder, nhead_transdecoder, dim_feedforward_transdecoder, dropout_transdecoder)
         decoder_norm = nn.LayerNorm(d_model_transdecoder)
         self.decoder_trans = MyTransformerDecoder(decoder_layer, num_decoder_layers_transdecoder, decoder_norm)
-        self.grid_sample = args.grid_sample
-        self.fcn = FCN(self.args.d_model, self.args.n_commands, self.args.n_args, self.args.args_dim)
+        self.fcn = FCN(args.d_model, args.n_commands, args.n_args, args.args_dim)
         # --------------------------------------------------------------------------
 
         self.norm_pix_loss = norm_pix_loss
 
-        self.initialize_weights()
+        # self.initialize_weights()
         # self.text_encoder = Text_Encoder(args)
         self.args = args.n_commands
         self.embed_dim =embed_dim
 
-        self.fcn = FCN(decoder_embed_dim, args.n_commands, args.n_args)
+        # self.fcn = FCN(decoder_embed_dim, args.n_commands, args.n_args)
         
-    def initialize_weights(self):
-        # initialization
-        # initialize (and freeze) pos_embed by sin-cos embedding
-        pos_embed = get_1d_sincos_pos_embed_from_grid(self.pos_embed.shape[-1], int(self.max_len))#########################################
-        self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
+    # def initialize_weights(self):
+    #     # initialization
+    #     # initialize (and freeze) pos_embed by sin-cos embedding
+    #     pos_embed = get_1d_sincos_pos_embed_from_grid(self.pos_embed.shape[-1], int(self.max_len))#########################################
+    #     self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
 
-        decoder_pos_embed = get_1d_sincos_pos_embed_from_grid(self.decoder_pos_embed.shape[-1], int(self.max_len))######################################
-        self.decoder_pos_embed.data.copy_(torch.from_numpy(decoder_pos_embed).float().unsqueeze(0))
+    #     decoder_pos_embed = get_1d_sincos_pos_embed_from_grid(self.decoder_pos_embed.shape[-1], int(self.max_len))######################################
+    #     self.decoder_pos_embed.data.copy_(torch.from_numpy(decoder_pos_embed).float().unsqueeze(0))
 
-        # initialize nn.Linear and nn.LayerNorm
-        self.apply(self._init_weights)
+    #     # initialize nn.Linear and nn.LayerNorm
+    #     self.apply(self._init_weights)
 
-    def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            # we use xavier_uniform following official JAX ViT:
-            torch.nn.init.xavier_uniform_(m.weight)
-            if isinstance(m, nn.Linear) and m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.bias, 0)
-            nn.init.constant_(m.weight, 1.0)
+    # def _init_weights(self, m):
+    #     if isinstance(m, nn.Linear):
+    #         # we use xavier_uniform following official JAX ViT:
+    #         torch.nn.init.xavier_uniform_(m.weight)
+    #         if isinstance(m, nn.Linear) and m.bias is not None:
+    #             nn.init.constant_(m.bias, 0)
+    #     elif isinstance(m, nn.LayerNorm):
+    #         nn.init.constant_(m.bias, 0)
+    #         nn.init.constant_(m.weight, 1.0)
 
     def random_masking(self, x, commmand_embed, padding_mask, key_padding_mask, mask_ratio):
         """
@@ -536,42 +533,42 @@ class MaskedAutoencoderViT(nn.Module):
         # print('x: ',x)
         return x, mask, ids_restore,command_masked
 
-    def forward_decoder(self, x, ids_restore,commmand_embed):
-        # embed tokens
-        print('x.shape: ',x.shape)
-        '''torch.Size([256, 48, 256])'''
-        x = self.decoder_embed(x)
-        temp = torch.zeros(1, 1, x.shape[-1]).to(self.device)
-        command_mask  = temp.repeat(x.shape[0], x.shape[1], 1)
-        commmand_embed = self.decoder_command(commmand_embed)
-        '''commmand_embed.shape:  torch.Size([512, 16, 128])'''
-        # append mask tokens to sequence
-        mask_tokens = self.mask_token.repeat(x.shape[0], ids_restore.shape[1] - x.shape[1], 1)#+1 include cls token 
-        '''mask_tokens.shape:  torch.Size([512, 16, 128])'''
-        x_ = torch.cat([x[:, :, :], mask_tokens], dim=1)  # no cls token
-        '''x_0.shape:  torch.Size([512, 64, 128])'''
-        x = torch.gather(x_, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x.shape[2]))  # unshuffle
-        '''x_0.shape:  torch.Size([512, 64, 128])'''
+    # def forward_decoder(self, x, ids_restore,commmand_embed):
+    #     # embed tokens
+    #     print('x.shape: ',x.shape)
+    #     '''torch.Size([256, 48, 256])'''
+    #     x = self.decoder_embed(x)
+    #     temp = torch.zeros(1, 1, x.shape[-1]).to(self.device)
+    #     command_mask  = temp.repeat(x.shape[0], x.shape[1], 1)
+    #     commmand_embed = self.decoder_command(commmand_embed)
+    #     '''commmand_embed.shape:  torch.Size([512, 16, 128])'''
+    #     # append mask tokens to sequence
+    #     mask_tokens = self.mask_token.repeat(x.shape[0], ids_restore.shape[1] - x.shape[1], 1)#+1 include cls token 
+    #     '''mask_tokens.shape:  torch.Size([512, 16, 128])'''
+    #     x_ = torch.cat([x[:, :, :], mask_tokens], dim=1)  # no cls token
+    #     '''x_0.shape:  torch.Size([512, 64, 128])'''
+    #     x = torch.gather(x_, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x.shape[2]))  # unshuffle
+    #     '''x_0.shape:  torch.Size([512, 64, 128])'''
 
-        commmand_embed = torch.cat([command_mask, commmand_embed], dim=1)
-        commmand_embed = torch.gather(commmand_embed, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x.shape[2]))
-        # add pos embed
-        x = x + self.decoder_pos_embed
-        x = x + commmand_embed
-        # apply Transformer blocks
-        for blk in self.decoder_blocks:
-            x = blk(x)
-        x = self.decoder_norm(x)
-        # print('x1.shape: ',x.shape)
-        # predictor projection
-        args_logits = self.fcn(x)
-        #print('args_logits.shape: ',args_logits.shape)
-        #torch.Size([128, 64, 16, 257])
-        res = { 
-            "args_logits": args_logits
-        }        
-        return res
-   def decoder(self, image_feature, text_feature):
+    #     commmand_embed = torch.cat([command_mask, commmand_embed], dim=1)
+    #     commmand_embed = torch.gather(commmand_embed, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x.shape[2]))
+    #     # add pos embed
+    #     x = x + self.decoder_pos_embed
+    #     x = x + commmand_embed
+    #     # apply Transformer blocks
+    #     for blk in self.decoder_blocks:
+    #         x = blk(x)
+    #     x = self.decoder_norm(x)
+    #     # print('x1.shape: ',x.shape)
+    #     # predictor projection
+    #     args_logits = self.fcn(x)
+    #     #print('args_logits.shape: ',args_logits.shape)
+    #     #torch.Size([128, 64, 16, 257])
+    #     res = { 
+    #         "args_logits": args_logits
+    #     }        
+    #     return res
+    def forward_decoder(self, image_feature, text_feature):
         #attention mask
         future_mask = _generate_future_mask(text_feature.shape[0],text_feature.dtype,text_feature.device)
         #print('future_mask.shape: ',future_mask.shape)
@@ -602,12 +599,12 @@ class MaskedAutoencoderViT(nn.Module):
         # text = self.text_encoder(command, paramaters,self.pos_embed)
         #expand one dimension to command
         latent, mask, ids_restore, command_masked= self.forward_encoder(command, paramaters, mask_ratio)
-        #print('latent.shape: ',latent.shape)
-        #print('mask.shape: ',mask.shape)
-        #print('ids_restore.shape: ',ids_restore.shape)
-        '''latent.shape:  torch.Size([20, 16, 256])
-            mask.shape:  torch.Size([20, 64])
-            ids_restore.shape:  torch.Size([20, 64])'''
+        # print('latent.shape: ',latent.shape)
+        # print('mask.shape: ',mask.shape)
+        # print('ids_restore.shape: ',ids_restore.shape)
+        '''latent.shape:  torch.Size([256, 16, 256])
+        mask.shape:  torch.Size([256, 64])
+        ids_restore.shape:  torch.Size([256, 64])'''
         pred = self.forward_decoder(latent, ids_restore, command_masked)  # [N, L, p*p*3]
         # loss_dict = loss_fun(output)
         return pred, mask
