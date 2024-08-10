@@ -25,6 +25,7 @@ from model_utils import _make_seq_first, _make_batch_first, \
 from layers.transformer import *
 from layers.improved_transformer import *
 from layers.positional_encoding import *
+torch.set_printoptions(profile="full")
 class CADEmbedding(nn.Module):
     """Embedding: positional embed + command embed + parameter embed + group embed (optional)"""
     def __init__(self, args, seq_len, use_group=False):
@@ -39,12 +40,18 @@ class CADEmbedding(nn.Module):
         S, N = commands.shape
         command_embed = self.command_embed(commands.long())
         N = N+1 #fake class token
-        temp = self.embed_fcn(self.arg_embed((args + 1).long()).view(S, N, -1))[1:,:,:]
+        
+        # print('self.arg_embed: ',self.arg_embed)
+        # print('args.shape: ',args.shape)
+        '''self.arg_embed:  Embedding(258, 65, padding_idx=0)
+        args.shape:  torch.Size([256, 65, 16])'''
+        # print('arg: ',args)
+        temp = self.arg_embed((args + 1).long())
         print('temp.shape: ',temp.shape)
-        src =  command_embed+ \
-              self.embed_fcn(self.arg_embed((args + 1).long()).view(S, N, -1))[1:,:,:]  # shift due to -1 PAD_VAL
+        temp1 = self.embed_fcn(temp.view(S, N, -1))
+        temp1[:,1:,:] =  command_embed+ temp1[:,1:,:]  # shift due to -1 PAD_VAL
         # src = self.pos_encoding(src)
-        return src,command_embed
+        return temp1,command_embed
     
 class FCN(nn.Module):
     def __init__(self, d_model, n_commands, n_args, args_dim=256):
@@ -83,10 +90,10 @@ class MaskedAutoencoderViT(nn.Module):
         self.mask_ratio = mask_ratio
         self.max_len = args.max_total_len+1 # include fake cls token
         self.pos_embed = nn.Parameter(torch.zeros(1, self.max_len, embed_dim), requires_grad=False)  # fixed sin-cos embedding
-        if args.device == 'cpu':
-            self.device = torch.device("cpu")
-        else:
+        if args.device =='gpu' or args.device=='GPU':
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        else:
+            self.device = "cpu"
         self.blocks = nn.ModuleList([
             Block(embed_dim, num_heads, mlp_ratio, qkv_bias=True, qk_scale=None, norm_layer=norm_layer)
             for i in range(depth)])
@@ -102,14 +109,15 @@ class MaskedAutoencoderViT(nn.Module):
         self.decoder_command = nn.Linear(embed_dim, decoder_embed_dim, bias=True)
         self.mask_token = nn.Parameter(torch.zeros(1, 1, decoder_embed_dim))
 
-        self.decoder_pos_embed = nn.Parameter(torch.zeros(1, self.max_len, decoder_embed_dim), requires_grad=False)  # fixed sin-cos embedding
+        self.decoder_pos_embed = nn.Parameter(torch.zeros(1, self.max_len-1, decoder_embed_dim), requires_grad=False)  # fixed sin-cos embedding. minius 1 because of fake cls token
 
         self.decoder_blocks = nn.ModuleList([
             Block(decoder_embed_dim, decoder_num_heads, mlp_ratio, qkv_bias=True, qk_scale=None, norm_layer=norm_layer)
             for i in range(decoder_depth)])
 
         self.decoder_norm = norm_layer(decoder_embed_dim)
-        self.decoder_pred = nn.Linear(decoder_embed_dim, args.n_commands, bias=True) # decoder to patch
+        self.decoder_pred = nn.Linear(decoder_embed_dim, args.n_commands, bias=True) # decoder to 
+        self.command_embed = nn.Embedding(args.n_commands, args.embed_dim)
         # --------------------------------------------------------------------------
 
         self.norm_pix_loss = norm_pix_loss
@@ -118,7 +126,7 @@ class MaskedAutoencoderViT(nn.Module):
         # self.text_encoder = Text_Encoder(args)
         self.args = args.n_commands
         self.embed_dim =embed_dim
-        self.fake_class_token = args.args_dim+1
+        self.fake_class_token = args.args_dim
         self.fcn = FCN(decoder_embed_dim, args.n_commands, args.n_args)
         
     def initialize_weights(self):
@@ -127,7 +135,7 @@ class MaskedAutoencoderViT(nn.Module):
         pos_embed = get_1d_sincos_pos_embed_from_grid(self.pos_embed.shape[-1], int(self.max_len))#########################################
         self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
 
-        decoder_pos_embed = get_1d_sincos_pos_embed_from_grid(self.decoder_pos_embed.shape[-1], int(self.max_len))######################################
+        decoder_pos_embed = get_1d_sincos_pos_embed_from_grid(self.decoder_pos_embed.shape[-1], int(self.max_len-1))####################################### fixed sin-cos embedding. minius 1 because of fake cls token
         self.decoder_pos_embed.data.copy_(torch.from_numpy(decoder_pos_embed).float().unsqueeze(0))
 
         # initialize nn.Linear and nn.LayerNorm
@@ -192,19 +200,17 @@ class MaskedAutoencoderViT(nn.Module):
         
         fake_class_padding = torch.Tensor(batch_size, 1, num_paramaters).fill_(self.fake_class_token).to(self.device)
         '''fake_class_padding.shape:  torch.Size([256, 1, 16])'''
-        paramaters = torch.cat([paramaters, fake_class_padding], dim=1)
+        paramaters = torch.cat([fake_class_padding, paramaters], dim=1)
         '''paramaters.shape:  torch.Size([256, 65, 16])'''
-        print('paramaters.shape: ',paramaters.shape)
         x, commmand_embed= self.embedding(commmand, paramaters)
-        print('x.shape: ',x.shape)
-        print('commmand_embed.shape: ',commmand_embed.shape)
-        '''x.shape:  torch.Size([256, 64, 512])[batchsize, sqeuence length, embedding dim]'''
-        print('self.pos_embed.shape: ',self.pos_embed.shape)    
+        '''x.shape:  torch.Size([256, 64, 512])[batchsize, sqeuence length, embedding dim]
+            commmand_embed.shape:  torch.Size([256, 64, 256])'''
         x = x + self.pos_embed[:, :, :]
-        print('self.pos_embed.shape: ',self.pos_embed.shape)
-
+        '''self.pos_embed.shape:  torch.Size([1, 65, 256])'''
+        x_mask = x[:, 1:, :]
         # masking: length -> length * mask_ratio
-        x, mask, ids_restore, command_masked, padding_mask_keep, key_padding_mask_keep= self.random_masking(x, commmand_embed, padding_mask, key_padding_mask, mask_ratio)
+        x_mask, mask, ids_restore, command_masked, padding_mask_keep, key_padding_mask_keep= self.random_masking(x_mask, commmand_embed, padding_mask, key_padding_mask, mask_ratio)
+        x = torch.cat([x[:, :1, :], x_mask], dim=1)  # include cls token
         # print('x.shape: ',x.shape)
         padding_mask_keep = padding_mask_keep.permute(1,0,2)
         key_padding_mask_keep = key_padding_mask_keep.squeeze(-1)
@@ -215,28 +221,27 @@ class MaskedAutoencoderViT(nn.Module):
 
         return x, mask, ids_restore,command_masked
 
-    def forward_decoder(self, x, ids_restore,commmand_embed):
+    def forward_decoder(self, x, ids_restore,command):
         # embed tokens
-        # print('x.shape: ',x.shape)
-        '''torch.Size([256, 48, 256])'''
+        '''x.shape:  torch.Size([256, 17(16+1), 256])
+        ids_restore.shape:  torch.Size([256, 64])
+        command.shape:  torch.Size([256, 64])'''
         x = self.decoder_embed(x)
-        temp = torch.zeros(1, 1, x.shape[-1]).to(self.device)
-        command_mask  = temp.repeat(x.shape[0], x.shape[1], 1)
-        commmand_embed = self.decoder_command(commmand_embed)
-        '''commmand_embed.shape:  torch.Size([512, 16, 128])'''
+        '''x.shape:  torch.Size([256, 17, 512])'''
         # append mask tokens to sequence
-        mask_tokens = self.mask_token.repeat(x.shape[0], ids_restore.shape[1] - x.shape[1], 1)#+1 include cls token 
-        '''mask_tokens.shape:  torch.Size([512, 16, 128])'''
-        x_ = torch.cat([x[:, :, :], mask_tokens], dim=1)  # no cls token
-        '''x_0.shape:  torch.Size([512, 64, 128])'''
+        mask_tokens = x[:,0:1,:].repeat(1, ids_restore.shape[1] - x.shape[1]+1, 1)#+1 include cls token 
+        '''mask_tokens.shape:  torch.Size([256, 47, 128])'''
+        mask_tokens = mask_tokens.clone()
+        
+        x_ = torch.cat([x[:, 1:, :], mask_tokens], dim=1)  # no cls token
+        '''x_.shape:  torch.Size([256, 64, 128])'''
         x = torch.gather(x_, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x.shape[2]))  # unshuffle
-        '''x_0.shape:  torch.Size([512, 64, 128])'''
-
-        commmand_embed = torch.cat([command_mask, commmand_embed], dim=1)
-        commmand_embed = torch.gather(commmand_embed, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x.shape[2]))
+        
+        command_embed = self.command_embed(command.long())
+        command_embed = self.decoder_command(command_embed)
         # add pos embed
         x = x + self.decoder_pos_embed
-        x = x + commmand_embed
+        x = x + command_embed
         # apply Transformer blocks
         for blk in self.decoder_blocks:
             x = blk(x)
@@ -263,7 +268,7 @@ class MaskedAutoencoderViT(nn.Module):
         '''latent.shape:  torch.Size([20, 16, 256])
             mask.shape:  torch.Size([20, 64])
             ids_restore.shape:  torch.Size([20, 64])'''
-        pred = self.forward_decoder(latent, ids_restore, command_masked)  # [N, L, p*p*3]
+        pred = self.forward_decoder(latent, ids_restore, command)  # [N, L, p*p*3]
         # loss_dict = loss_fun(output)
         return pred, mask
 

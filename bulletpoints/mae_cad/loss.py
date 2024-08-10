@@ -179,19 +179,19 @@ class CADLoss(nn.Module):
     def forward(self, output):
         # Target & predictions
         tgt_commands, tgt_args = output["tgt_commands"], output["tgt_args"]
-        logging.info(f'tgt_commands.shape: {tgt_commands.shape}')
-        logging.info(f'tgt_args.shape: {tgt_args.shape}')
+        # logging.info(f'tgt_commands.shape: {tgt_commands.shape}')
+        # logging.info(f'tgt_args.shape: {tgt_args.shape}')
         '''tgt_commands.shape:  torch.Size([256, 64])
             tgt_args.shape:  torch.Size([256, 64, 16])'''
         visibility_mask = _get_visibility_mask(tgt_commands, seq_dim=-1)
         padding_mask = _get_padding_mask(tgt_commands, seq_dim=-1, extended=True) * visibility_mask.unsqueeze(-1)
-        logging.info(f'visibility_mask.shape: {visibility_mask.shape}')
-        logging.info(f'padding_mask.shape: {padding_mask.shape}')
+        # logging.info(f'visibility_mask.shape: {visibility_mask.shape}')
+        # logging.info(f'padding_mask.shape: {padding_mask.shape}')
         '''visibility_mask.shape:  torch.Size([256])
             padding_mask.shape:  torch.Size([256, 64])'''
         # command_logits, args_logits = output["command_logits"], output["args_logits"]
         args_logits = output["args_logits"]
-        logging.info('args_logits.shape',args_logits.shape)
+        # logging.info('args_logits.shape',args_logits.shape)
         mask = self.cmd_args_mask[tgt_commands.long()]
 
 
@@ -210,14 +210,14 @@ class CADLoss(nn.Module):
         commands = tgt_commands.unsqueeze(-1)
         paramaters = F.softmax(args_logits,dim=-1)
         paramaters = torch.argmax(paramaters,dim=-1)
-        print('commands.shape',commands.shape)
-        print('paramaters.shape',paramaters.shape)
+        # print('commands.shape',commands.shape)
+        # print('paramaters.shape',paramaters.shape)
         '''command: [50, 60, 1]  paramaters: [50, 60, 16]'''
         allcommand = torch.cat((commands, paramaters),dim=-1)
         '''allcommand: [50, 60, 17]'''
-        logging.info(f'command.shape: {commands.shape}')
-        logging.info(f'paramaters.shape: {paramaters.shape}')
-        logging.info(f'allcommand.shape: {allcommand.shape}')
+        # logging.info(f'command.shape: {commands.shape}')
+        # logging.info(f'paramaters.shape: {paramaters.shape}')
+        # logging.info(f'allcommand.shape: {allcommand.shape}')
         one_command = allcommand[0,:,:]
         one_command = one_command.cpu().detach().numpy()
         #save one_command to one_command.txt
