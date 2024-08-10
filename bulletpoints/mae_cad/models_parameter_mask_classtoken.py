@@ -25,6 +25,7 @@ from model_utils import _make_seq_first, _make_batch_first, \
 from layers.transformer import *
 from layers.improved_transformer import *
 from layers.positional_encoding import *
+import sys
 torch.set_printoptions(profile="full")
 class CADEmbedding(nn.Module):
     """Embedding: positional embed + command embed + parameter embed + group embed (optional)"""
@@ -171,9 +172,14 @@ class MaskedAutoencoderViT(nn.Module):
         ids_masked = ids_shuffle[:, len_keep:]
         command_masked = torch.gather(commmand_embed, dim=1, index=ids_masked.unsqueeze(-1).repeat(1, 1, D))
         x_keep = torch.gather(x, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, D))
+        # print('ids_keep: ',ids_keep.shape)
+        # print('key_padding_mask: ',key_padding_mask.shape)
+        '''ids_keep:  torch.Size([256, 16])
+            key_padding_mask:  torch.Size([256, 64])'''
         key_padding_mask_keep = torch.gather(key_padding_mask.unsqueeze(-1), dim=1, index=ids_keep.unsqueeze(-1))
         padding_mask_keep = torch.gather(padding_mask.unsqueeze(-1), dim=1, index=ids_keep.unsqueeze(-1))
-
+        '''key_padding_mask_keep.shape:  torch.Size([256, 16, 1])
+            padding_mask_keep.shape:  torch.Size([256, 16, 1])'''
         # generate the binary mask: 0 is keep, 1 is remove
         mask = torch.ones([N, L], device=x.device)
         mask[:, :len_keep] = 0
@@ -187,6 +193,8 @@ class MaskedAutoencoderViT(nn.Module):
         '''commmand.shape:  torch.Size([10, 64])
             paramaters.shape:  torch.Size([10, 64, 16])'''
         padding_mask, key_padding_mask = _get_padding_mask(commmand, seq_dim=-1), _get_key_padding_mask(commmand, seq_dim=-1)
+        # logging.info('padding_mask: %s',padding_mask)
+        logging.info('key_padding_mask: %s',key_padding_mask)
         # print('padding_mask.shape: ',padding_mask.shape)
         # print('key_padding_mask.shape: ',key_padding_mask.shape)
         '''
@@ -207,17 +215,27 @@ class MaskedAutoencoderViT(nn.Module):
             commmand_embed.shape:  torch.Size([256, 64, 256])'''
         x = x + self.pos_embed[:, :, :]
         '''self.pos_embed.shape:  torch.Size([1, 65, 256])'''
-        x_mask = x[:, 1:, :]
+        x_mask = x[:, 1:, :].clone()
         # masking: length -> length * mask_ratio
         x_mask, mask, ids_restore, command_masked, padding_mask_keep, key_padding_mask_keep= self.random_masking(x_mask, commmand_embed, padding_mask, key_padding_mask, mask_ratio)
+        '''key_padding_mask_keep: bool, padding_mask_keep: 0,1
+           key_padding_mask_keep.shape:  torch.Size([256, 16, 1])'''
+        print('key_padding_mask_keep.shape: ',key_padding_mask_keep.shape)
         x = torch.cat([x[:, :1, :], x_mask], dim=1)  # include cls token
-        # print('x.shape: ',x.shape)
+        
         padding_mask_keep = padding_mask_keep.permute(1,0,2)
         key_padding_mask_keep = key_padding_mask_keep.squeeze(-1)
+        temp_mask = torch.Tensor(key_padding_mask_keep.size(0),1).fill_(True).to(torch.bool).to(self.device)
+
+        key_padding_mask_keep = torch.cat([temp_mask, key_padding_mask_keep], dim=-1)
         # apply Transformer blocks
-        for blk in self.blocks:
-            x = blk(x)
+        x = x.permute(1,0,2)
+        x = self.encoder(x, mask=None, src_key_padding_mask=key_padding_mask_keep)
+        # print('x0.shape: ',x.shape)
+        '''x0.shape:  torch.Size([48(sequence length), 10(batch size), 256])'''
+        # print('padding_mask_keep.shape: ',padding_mask_keep.shape)
         x = self.norm(x)
+        x = x.permute(1,0,2)
 
         return x, mask, ids_restore,command_masked
 

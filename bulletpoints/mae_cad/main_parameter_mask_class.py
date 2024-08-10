@@ -13,6 +13,7 @@ import config
 from macro import *
 from loss import CADLoss
 import torch.nn.functional as F
+import logging
 class CrossEntropyLoss(torch.nn.Module):
     def __init__(self, reduction='mean'):
         super(CrossEntropyLoss, self).__init__()
@@ -104,9 +105,17 @@ if __name__ == '__main__':
     model = MaskedAutoencoderViT(args,mask_ratio=args.mask_ratio, embed_dim=args.embed_dim, depth=args.depth, num_heads=args.num_heads,
                  decoder_embed_dim=args.decoder_embed_dim, decoder_depth=args.decoder_depth, decoder_num_heads=args.decoder_num_heads,
                  mlp_ratio=args.mlp_ratio)
+    log_save_path = os.path.join(save_path,'paramaters.log')
+    if os.path.exists(log_save_path):
+        os.remove(log_save_path)
+    logging.basicConfig(level=logging.INFO,
+                    filename=log_save_path,
+                    filemode='a',  
+                    format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s'
+                    )
     for arg in vars(args):
-        print(arg, ':', getattr(args, arg))
-    print('model:',model)
+        logging.info(f'{arg} : {getattr(args, arg)}')
+    logging.info(f'model:{model}')
     optimizer = torch.optim.AdamW(model.parameters(), lr=LR, betas=(0.9, 0.95))
     loss_fun = CADLoss(args).to(device)
     model = model.to(device)
