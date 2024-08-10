@@ -30,15 +30,19 @@ class CADEmbedding(nn.Module):
     def __init__(self, args, seq_len, use_group=False):
         super().__init__()
         self.command_embed = nn.Embedding(args.n_commands, args.embed_dim)
-        args_dim = args.args_dim + 1
-        self.arg_embed = nn.Embedding(args_dim, 64, padding_idx=0)
-        self.embed_fcn = nn.Linear(64 * args.n_args, args.embed_dim)
+        args_dim = args.args_dim +2# one for empty, one for fake index
+        max_len = 64+1
+        self.arg_embed = nn.Embedding(args_dim, max_len, padding_idx=0)
+        self.embed_fcn = nn.Linear(max_len * args.n_args, args.embed_dim)
 
     def forward(self, commands, args, groups=None):
         S, N = commands.shape
         command_embed = self.command_embed(commands.long())
+        N = N+1 #fake class token
+        temp = self.embed_fcn(self.arg_embed((args + 1).long()).view(S, N, -1))[1:,:,:]
+        print('temp.shape: ',temp.shape)
         src =  command_embed+ \
-              self.embed_fcn(self.arg_embed((args + 1).long()).view(S, N, -1))  # shift due to -1 PAD_VAL
+              self.embed_fcn(self.arg_embed((args + 1).long()).view(S, N, -1))[1:,:,:]  # shift due to -1 PAD_VAL
         # src = self.pos_encoding(src)
         return src,command_embed
     
@@ -47,7 +51,7 @@ class FCN(nn.Module):
         super().__init__()
 
         self.n_args = n_args
-        self.args_dim = args_dim+ 1
+        self.args_dim = args_dim +1
         self.d_model = d_model
         # self.command_fcn = nn.Linear(d_model, n_commands)
         self.args_fcn = nn.Linear(d_model, n_args * self.args_dim)
@@ -77,7 +81,7 @@ class MaskedAutoencoderViT(nn.Module):
         # MAE encoder specifics
 
         self.mask_ratio = mask_ratio
-        self.max_len = args.max_total_len
+        self.max_len = args.max_total_len+1 # include fake cls token
         self.pos_embed = nn.Parameter(torch.zeros(1, self.max_len, embed_dim), requires_grad=False)  # fixed sin-cos embedding
         if args.device == 'cpu':
             self.device = torch.device("cpu")
@@ -114,7 +118,7 @@ class MaskedAutoencoderViT(nn.Module):
         # self.text_encoder = Text_Encoder(args)
         self.args = args.n_commands
         self.embed_dim =embed_dim
-
+        self.fake_class_token = args.args_dim+1
         self.fcn = FCN(decoder_embed_dim, args.n_commands, args.n_args)
         
     def initialize_weights(self):
@@ -183,9 +187,19 @@ class MaskedAutoencoderViT(nn.Module):
         padding_mask.shape:  torch.Size([64, 10, 1])
             key_padding_mask.shape:  torch.Size([10, 64])'''
         #padding_indicate = torch.sum(padding_mask,dim=-1)
-        x, commmand_embed= self.embedding(commmand, paramaters)
-        '''x.shape:  torch.Size([256, 64, 512])[batchsize, sqeuence length, embedding dim]'''
+        batch_size, max_length, num_paramaters =paramaters.shape
+        #print('self.fake_class_token: ',self.fake_class_token)# 257
         
+        fake_class_padding = torch.Tensor(batch_size, 1, num_paramaters).fill_(self.fake_class_token).to(self.device)
+        '''fake_class_padding.shape:  torch.Size([256, 1, 16])'''
+        paramaters = torch.cat([paramaters, fake_class_padding], dim=1)
+        '''paramaters.shape:  torch.Size([256, 65, 16])'''
+        print('paramaters.shape: ',paramaters.shape)
+        x, commmand_embed= self.embedding(commmand, paramaters)
+        print('x.shape: ',x.shape)
+        print('commmand_embed.shape: ',commmand_embed.shape)
+        '''x.shape:  torch.Size([256, 64, 512])[batchsize, sqeuence length, embedding dim]'''
+        print('self.pos_embed.shape: ',self.pos_embed.shape)    
         x = x + self.pos_embed[:, :, :]
         print('self.pos_embed.shape: ',self.pos_embed.shape)
 
