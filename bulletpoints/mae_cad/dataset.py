@@ -38,7 +38,7 @@ class CADGENdataset(data.Dataset):
     def __getitem__(self, index):
         
         h5_path = self.file_list[index]
-        print('h5_path: ',h5_path)
+        # print('h5_path: ',h5_path)
         data_num = h5_path.split('/')[-1][:-3]
         # h5_path = os.path.join(self.cmd_root, data_num+'.h5') 
         with h5py.File(h5_path, "r") as fp:
