@@ -19,7 +19,7 @@ class CADGENdataset(data.Dataset):
     def __init__(self,cfg,test):
         self.test = test
         self.data_root= cfg.data_root
-        self.cmd_root = cfg.cmd_root
+        # self.cmd_root = cfg.cmd_root
         
         self.train_lis = os.path.join(self.data_root,'train.txt')
         self.test_lis = os.path.join(self.data_root,'test.txt')
@@ -37,9 +37,10 @@ class CADGENdataset(data.Dataset):
     
     def __getitem__(self, index):
         
-        data_num = self.file_list[index]
-        
-        h5_path = os.path.join(self.cmd_root, data_num+'.h5') 
+        h5_path = self.file_list[index]
+        print('h5_path: ',h5_path)
+        data_num = h5_path.split('/')[-1][:-3]
+        # h5_path = os.path.join(self.cmd_root, data_num+'.h5') 
         with h5py.File(h5_path, "r") as fp:
             cad_vec = fp["vec"][:] # (len, 1 + N_ARGS)
         # print('cad_vec.shape[0]: ',cad_vec.shape[0])

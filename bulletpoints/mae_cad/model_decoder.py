@@ -139,10 +139,21 @@ class MaskedAutoencoderViT(nn.Module):
 
     def forward(self, command):
         batch_size = command.shape[0]
-        x = torch.randn(batch_size, self.embed_dim)
+        '''use one global feature as input'''
+        # x = torch.randn(batch_size, self.embed_dim)
+        # x = x*256
+        # x = x.to(self.device)
+        # #repeat x in dimension 1
+        # x = x.unsqueeze(1).repeat(1, self.max_len, 1)
+        '''the whole batch normal'''
+        # x = torch.randn(batch_size, self.max_len, self.embed_dim)
+        # x = x*256
+        # x = x.to(self.device)
+        '''layer normal'''
+        list_of_tensors = [torch.randn(self.max_len, self.embed_dim) for _ in range(batch_size)]
+        #convert res to tensor
+        x = torch.stack(list_of_tensors, dim=0)
         x = x.to(self.device)
-        #repeat x in dimension 1
-        x = x.unsqueeze(1).repeat(1, self.max_len, 1)
         pred = self.forward_decoder(command, x)  # [N, L, p*p*3]        
         return pred
 
@@ -175,3 +186,6 @@ def mae_vit_huge_patch14_dec512d8b(**kwargs):
 mae_vit_base_patch16 = mae_vit_base_patch16_dec512d8b  # decoder: 512 dim, 8 blocks
 mae_vit_large_patch16 = mae_vit_large_patch16_dec512d8b  # decoder: 512 dim, 8 blocks
 mae_vit_huge_patch14 = mae_vit_huge_patch14_dec512d8b  # decoder: 512 dim, 8 blocks
+
+
+#/result_multi_feature: use x = torch.randn(batch_size, self.max_len, self.embed_dim)

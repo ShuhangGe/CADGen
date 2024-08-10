@@ -113,11 +113,13 @@ if __name__ == '__main__':
     
     print('start train')
     total_length = len(train_loader)
+    print('total_length: ',total_length)
     writer = SummaryWriter(log_dir)
     best_test = 10000000
     for epoch in range(epochs):
         epoch_start = time.time()
         for index, data in enumerate(train_loader):
+
             print(f'train: total length: {total_length}, index: {index}')
             # model.train()
             command, paramaters, data_num = data

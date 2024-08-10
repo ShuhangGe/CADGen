@@ -1,10 +1,14 @@
 import os
 import numpy as np
-txt_path = '/scratch/sg7484/CMDGen/3dmodel/datasets/all_data.txt'
-save_path ='/scratch/sg7484/CMDGen/3dmodel/datasets'
+import random
+txt_path = '/scratch/sg7484/data/CMDGen/all_data/all_data.txt'
+save_path ='/scratch/sg7484/data/CMDGen/all_data'
 with open(txt_path,'r') as f:
     lines = f.readlines()
 length  = len(lines)
+random.shuffle(lines)
+print(length)
+print(type(lines))
 split_ratio = 0.9
 trains = lines[:int(length*split_ratio)]
 tests = lines[int(length*split_ratio):]

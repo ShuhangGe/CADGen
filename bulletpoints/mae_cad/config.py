@@ -5,6 +5,6 @@ TRAIN_BATCH = 256
 TEST_BATCH = 64
 DEVICE = 'gpu'
 OPTIMIZER = 'amd'
-DATA_ROOT = '/scratch/sg7484/data/CMDGen/Sketch_1_Extrude_1'
+DATA_ROOT = '/scratch/sg7484/data/CMDGen/all_data'
 H5_ROOT = '/scratch/sg7484/data/CMDGen/Sketch_1_Extrude_1/cmd'
 SAVE_PATH = './results/bulletpoints/mae'

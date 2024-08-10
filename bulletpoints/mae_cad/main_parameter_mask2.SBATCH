@@ -15,4 +15,5 @@ singularity exec --nv \
                     --overlay /scratch/sg7484/pytorch-example/CMDGen-15GB.ext3:ro \
                             /scratch/work/public/singularity/cuda11.8.86-cudnn8.7-devel-ubuntu22.04.2.sif \
                              /bin/bash -c "source /ext3/env.sh; CUDA_LAUNCH_BLOCKING=1 python main_parameter_mask.py \
-                             --lr 1e-6 --save_path /scratch/sg7484/CADGen/bulletpoints/mae_cad/output/1e-6"
+                             --lr 1e-6 --save_path /scratch/sg7484/CADGen/bulletpoints/mae_cad/output/1e-6_075_all \
+                             --mask_ratio 0.75"

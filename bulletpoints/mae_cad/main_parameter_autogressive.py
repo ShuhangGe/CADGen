@@ -1,4 +1,3 @@
-'''get command as input and generate paramaters from a guassian distribution'''
 import argparse
 import numpy as np
 import torch
@@ -9,34 +8,11 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.autograd import Variable,Function
 import time
 import torchvision
-from model_decoder import MaskedAutoencoderViT
+from models_parameter_autogressive import MaskedAutoencoderViT
 import config
 from macro import *
 from loss import CADLoss
 import torch.nn.functional as F
-import logging
-import h5py
-logging.basicConfig(level=logging.INFO,  
-                    filename='/scratch/sg7484/CADGen/bulletpoints/mae_cad/main_deocder.log',
-                    filemode='a', 
-                    format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s',
-                    )
-
-def logits2vec(outputs, refill_pad=True, to_numpy=True):
-    """network outputs (logits) to final CAD vector"""
-    out_command = torch.argmax(torch.softmax(outputs['command_logits'], dim=-1), dim=-1)  # (N, S)
-    out_args = torch.argmax(torch.softmax(outputs['args_logits'], dim=-1), dim=-1) - 1  # (N, S, N_ARGS)
-    if refill_pad: # fill all unused element to -1
-        mask = ~torch.tensor(CMD_ARGS_MASK).bool().cuda()[out_command.long()]
-        # print('out_args.shape: ',out_args.shape)
-        # print('mask.shape: ',mask.shape)
-        out_args[mask] = -1
-
-    out_cad_vec = torch.cat([out_command.unsqueeze(-1), out_args], dim=-1)
-    if to_numpy:
-        out_cad_vec = out_cad_vec.detach().cpu().numpy()
-    return out_cad_vec
-
 class CrossEntropyLoss(torch.nn.Module):
     def __init__(self, reduction='mean'):
         super(CrossEntropyLoss, self).__init__()
@@ -98,11 +74,25 @@ if __name__ == '__main__':
     parser.add_argument('--decoder_num_heads', type=int, default=16)
     parser.add_argument('--mlp_ratio', type=float, default=4.)
     parser.add_argument('--args_dim', type=int, default=256)
-    parser.add_argument('--model_path', type=str, default='/scratch/sg7484/CADGen/bulletpoints/mae_cad/output/1e-4_075_all/model/MAE_CAD_290_1.0972325635807856.path')
-    parser.add_argument('--result_path', type=str, default='/scratch/sg7484/CADGen/bulletpoints/mae_cad/result')
+
+    #bert decoder
+    parser.add_argument('--args_dim', type=int, default=ARGS_DIM)#
+    parser.add_argument('--bert_num_layers', type=int, default=6)
+    parser.add_argument('--bert_attention_heads', type=int, default=16)
+    parser.add_argument('--bert_feedforward_size', type=int, default=768* 4)
+    parser.add_argument('--bert_hidden_size', type=int, default=256)
+    #transformer decoder
+    parser.add_argument('--d_model_transdecoder', type=int, default=256)
+    parser.add_argument('--nhead_transdecoder', type=int, default=8)
+    parser.add_argument('--num_encoder_layers_transdecoder', type=int, default=6)
+    parser.add_argument('--num_decoder_layers_transdecoder', type=int, default=6)
+    parser.add_argument('--dim_feedforward_transdecoder', type=int, default=2048)
+    parser.add_argument('--dropout_transdecoder', type=int, default=0.1)
+    #beam search
+    parser.add_argument('--num_beam', type=int, default=6)
+
     #load parmaters
     args = parser.parse_args()
-    model_path = args.model_path
     epochs = args.epochs
     device = args.device
     if device =='gpu' or device=='GPU':
@@ -110,9 +100,6 @@ if __name__ == '__main__':
     else:
         device = "cpu"
     save_path = args.save_path
-    result_path = args.result_path
-    if not os.path.exists(result_path):
-        os.makedirs(result_path)
     model_dir = os.path.join(save_path,'model')
     log_dir = os.path.join(save_path,'log')
     LR =args.lr
@@ -140,63 +127,81 @@ if __name__ == '__main__':
     optimizer = torch.optim.AdamW(model.parameters(), lr=LR, betas=(0.9, 0.95))
     loss_fun = CADLoss(args).to(device)
     model = model.to(device)
-    print('model: ', model)
-    # load model paramaters 
-    pretrained_dict=torch.load(model_path)
-    model_dict=model.state_dict()
-    # 1. filter out unnecessary keys
-    pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
-    # 2. overwrite entries in the existing state dict
-    model_dict.update(pretrained_dict)
-    model.load_state_dict(model_dict)
-    print('model loaded')
+    
     print('start train')
     total_length = len(train_loader)
+    print('total_length: ',total_length)
     writer = SummaryWriter(log_dir)
     best_test = 10000000
-    out_count = 0
-    out_num = 100
     for epoch in range(epochs):
         epoch_start = time.time()
-        if out_count >= out_num:
-            break
-        for idx, data in enumerate(train_loader):
-            if out_count >= out_num:
-                break
-            print(f'train: total length: {total_length}, index: {idx}')
+        for index, data in enumerate(train_loader):
+
+            print(f'train: total length: {total_length}, index: {index}')
             # model.train()
             command, paramaters, data_num = data
+            # print('command.shape: ',command.shape)
+            # print('paramaters.shape: ',paramaters.shape)
+            # print('command: ',command)
             bool_matrix = (command == 5)
             index = torch.nonzero(bool_matrix)
+            # print('index: ',index)
+            # print('bool_matrix: ',bool_matrix)
+            
             '''command.shape:  torch.Size([512, 64])
                 paramaters.shape:  torch.Size([512, 64, 16])'''
-            command, paramaters = command.to(device), paramaters.to(device)
-            output = model(command)
-            command_out = F.one_hot(command, num_classes=6)
-            # print('command_out.shape: ',command_out.shape) 
-            output["command_logits"] = command_out.type(torch.float32)
+            command, paramaters = command.to(device),paramaters.to(device)
+            optimizer.zero_grad()
+            output, mask = model(command, paramaters)
+            '''pred.shape:  torch.Size([512, 64, 6])
+            mask.shape:  torch.Size([512, 64])'''
+            output["tgt_commands"] = command
+            output["tgt_args"] = paramaters
+            output["command_logits"] = command.type(torch.float32)
+            loss = loss_fun(output)
+            print('loss: ',loss)
+            # loss = loss_dict.values()
+            loss.backward()
+            optimizer.step()
+            writer.add_scalar('loss_train',loss.item(),global_step=epoch)
+            print('loss_train',loss.item())
 
-            out_cad_vec = logits2vec(output)
-            
-            gt_vec = torch.cat([command.unsqueeze(-1), paramaters], dim=-1).squeeze(1).detach().cpu().numpy()
-            batch_size = command.shape[0]
-            save_root = result_path
-            # for index, i in enumerate(all_command):
-            #     i.astype(int)
-            #     np.savetxt(f'/scratch/sg7484/CADGen/bulletpoints/mae_cad/decoder_result/{index}.txt',i)
-            for j in range(batch_size):
-                if out_count >= out_num:
-                    break
-                out_vec = out_cad_vec[j]
-                seq_len = command[j].tolist().index(EOS_IDX)
-                data_id = epoch*total_length + idx*batch_size + j
-                save_path = os.path.join(save_root, '{}_vec.h5'.format(data_id))
-                print('save_path: ',save_path)
-                with h5py.File(save_path, 'w') as fp:
-                    fp.create_dataset('out_vec', data=out_vec[:seq_len], dtype=np.int)
-                    fp.create_dataset('gt_vec', data=gt_vec[j][:seq_len], dtype=np.int)
-                #print('out_vec.shape: ',out_vec.shape)
-                #print('gt_vec.shape: ',gt_vec.shape)
-                np.savetxt(os.path.join(save_root,f'{data_id}_out_vec.txt'), out_vec[:seq_len])
-                np.savetxt(os.path.join(save_root,f'{data_id}_gt_vec.txt'), gt_vec[j][:seq_len])
-                out_count += 1
+        average_loss = 0
+        test_loss = 0.0
+        test_total = 0
+        total_length = len(test_loader)
+        with torch.no_grad():
+            for index, data in enumerate(test_loader):
+                print(f'test: total length: {total_length}, index: {index}')
+                model.eval()
+                command, paramaters, data_num = data
+                command, paramaters = command.to(device),paramaters.to(device)
+                output, mask = model(command, paramaters)
+                '''pred.shape:  torch.Size([512, 64, 6])
+                mask.shape:  torch.Size([512, 64])'''
+                output["tgt_commands"] = command
+                output["tgt_args"] = paramaters
+                output["command_logits"] = command.type(torch.float32)
+                loss = loss_fun(output)
+                print('loss: ',loss)        
+                test_loss += loss.item()
+                # print('loss',loss)
+        average_loss = test_loss/(index+1)
+        # print('average_loss',average_loss)
+        writer.add_scalar('average_loss', average_loss, global_step=epoch)
+        print('average_loss: ',average_loss)
+        if average_loss<best_test:
+            best_test = average_loss
+            if not os.path.exists(model_dir):
+                os.makedirs(model_dir)
+            model_path = os.path.join(model_dir, f'MAE_CAD_{epoch}_{average_loss}.path')
+            torch.save(model.state_dict(), model_path)
+
+    if not os.path.exists(model_dir):
+        os.makedirs(model_dir)
+    model_path = os.path.join(model_dir, f'MAE_CAD_last_{epoch}.path')
+    torch.save(model.state_dict(), model_path)
+
+
+
+
