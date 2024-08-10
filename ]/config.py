@@ -1,1 +1,0 @@
-DATA_PATH = '/home/shuhang/Desktop/CADgen/point_cad_gen/data/123'
