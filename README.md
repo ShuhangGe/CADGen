@@ -164,12 +164,6 @@ The framework evaluates performance using:
 3. **Parameter Error**: Mean squared error between predicted and ground truth parameters
 4. **Visual Quality**: Qualitative assessment of the generated 3D models
 
-Benchmark results on test set:
-| Model | CD ↓ | Cmd Acc ↑ | Param MSE ↓ |
-|-------|------|-----------|-------------|
-| Base  | -    | -         | -           |
-| Deformable | - | -       | -           |
-| Autoregressive | - | -   | -           |
 
 ## Inference Examples
 
