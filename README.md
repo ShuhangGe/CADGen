@@ -1,140 +1,236 @@
-# CADGen: 3D CAD Model Generation Framework
+# CADGen: Advanced 3D CAD Model Generation Framework
 
-CADGen is a deep learning framework for generating 3D CAD models from multi-view images. The project focuses on converting 2D representations (front, top, and side views) into 3D CAD models with precise command sequences and parameters.
+CADGen is a state-of-the-art deep learning framework for generating 3D CAD models from multi-view images. The project enables the conversion of 2D representations (front, top, and side views) into precise 3D CAD models with accurate command sequences and parameters.
 
-## Features
+<p align="center">
+  <img src="docs/assets/cadgen-overview.png" alt="CADGen Overview" width="800"/>
+  <br>
+  <em>CADGen: Generating 3D CAD models from 2D multi-view inputs</em>
+</p>
 
-- Multi-view image to 3D CAD model conversion
-- Various model architectures:
-  - Autoregressive models
-  - Set Transformer-based models
-  - Deformable models
-- Point cloud generation and processing
-- Comprehensive evaluation metrics
+## 🔍 Features
 
-## Project Structure
+- **Multi-view to 3D Conversion**: Transform 2D images into complete 3D CAD models
+- **Multiple Model Architectures**:
+  - 🔹 Autoregressive models for sequential generation
+  - 🔹 Set Transformer-based models for global reasoning
+  - 🔹 Deformable models for complex geometry understanding
+- **Point Cloud Processing**: Advanced point cloud generation and manipulation
+- **Comprehensive Evaluation**: Robust metrics for assessing generation quality
+
+## 🏗️ Project Structure
+
+The CADGen project is organized into several interconnected modules, each with a specific role in the 3D CAD generation pipeline:
+
+### Core Modules
 
 ```
 CADGen/
-├── 3dmodel/                     # Core 3D model generation code
-│   ├── model/                   # Model architectures
-│   ├── datasets/                # Dataset handling
-│   ├── cadlib/                  # CAD processing utilities
-│   ├── utils/                   # Helper functions
-│   ├── train.py                 # Main training script
-│   ├── train_deformable.py      # Training for deformable models
-│   ├── train_deformable_cad.py  # Training for deformable CAD models
-│   └── test.py                  # Testing script
-├── 3dmodel_autoregressive/      # Autoregressive model implementations
-├── 3dmodel_autoregressive_pointcloud/ # Point cloud autoregressive models
-├── 3dmodel_settransformer/      # Set Transformer model implementations
-├── data_process/                # Data preprocessing utilities
-│   ├── json2pc_my.py            # JSON to point cloud conversion
-│   ├── json2vec_my.py           # JSON to vector conversion
-│   └── various data conversion scripts
-├── evaluation/                  # Evaluation metrics and scripts
-│   ├── evaluate_ae_cd.py        # Chamfer distance evaluation
-│   ├── evaluate_ae_acc.py       # Accuracy evaluation
-│   └── evaluate_gen_torch.py    # Generation evaluation
-└── bulletpoints/                # Additional utilities
+├── 3dmodel/                     # Core model implementation
+│   ├── model/                   # Model architecture definitions
+│   │   ├── model.py             # Base model definitions
+│   │   ├── model_simple.py      # Simplified model variant
+│   │   ├── transformer.py       # Transformer components
+│   │   └── loss.py              # Loss functions
+│   ├── datasets/                # Dataset handling for training
+│   │   ├── dataset.py           # Core dataset classes
+│   │   └── augmentation.py      # Data augmentation strategies
+│   ├── cadlib/                  # CAD processing and manipulation
+│   │   ├── cad_utils.py         # CAD operation utilities
+│   │   └── command_parser.py    # CAD command parsing
+│   ├── utils/                   # Utility functions
+│   │   ├── config.py            # Configuration handling
+│   │   ├── logger.py            # Logging utilities
+│   │   └── vis_utils.py         # Visualization helpers
+│   ├── train.py                 # Base model training script
+│   ├── train_deformable.py      # Deformable model training
+│   ├── train_deformable_cad.py  # Deformable CAD model training
+│   └── test.py                  # Model testing and evaluation
 ```
 
-## Requirements
+### Model Variants
 
-- PyTorch
-- CUDA-enabled GPU
+The project includes specialized model architectures, each designed to address specific aspects of the CAD generation task:
+
+```
+CADGen/
+├── 3dmodel_autoregressive/      # Sequential CAD generation models
+│   ├── model/                   # Autoregressive architecture
+│   ├── train.py                 # Training script
+│   └── inference.py             # Inference utilities
+│
+├── 3dmodel_autoregressive_pointcloud/ # Point cloud-based autoregressive models
+│   ├── model/                   # Point cloud sequential model
+│   └── train.py                 # Training script
+│
+├── 3dmodel_settransformer/      # Set Transformer implementation
+│   ├── model/                   # Set-based architecture
+│   └── train.py                 # Training script
+```
+
+### Data Processing Pipeline
+
+Tools for preparing, converting, and processing CAD data:
+
+```
+CADGen/
+├── data_process/                # Data preprocessing and conversion
+│   ├── json2pc_my.py            # Converts JSON CAD to point clouds
+│   ├── json2vec_my.py           # Converts JSON CAD to vector representations
+│   ├── data_split.py            # Splits datasets for training/validation
+│   ├── ply2txt.py               # PLY to text format conversion
+│   └── txt2np.py                # Text to NumPy format conversion
+```
+
+### Evaluation Framework
+
+Comprehensive evaluation tools for assessing model performance:
+
+```
+CADGen/
+├── evaluation/                  # Model evaluation tools
+│   ├── evaluate_ae_cd.py        # Chamfer distance evaluation
+│   ├── evaluate_ae_acc.py       # Command accuracy evaluation
+│   ├── evaluate_gen_torch.py    # Generation quality evaluation
+│   └── utils/                   # Evaluation utilities
+│       ├── metrics.py           # Metrics implementation
+│       └── visualization.py     # Results visualization
+```
+
+### Advanced Approaches
+
+Specialized modules for advanced techniques:
+
+```
+CADGen/
+└── bulletpoints/                # Specialized modeling approaches
+    └── mae_cad/                 # Masked Autoencoder for CAD modeling
+        ├── models_command.py    # Command prediction models
+        ├── models_parameter_*.py # Parameter prediction variants
+        ├── main_*.py            # Training scripts
+        └── README.md            # Module-specific documentation
+```
+
+### Data Flow
+
+The overall data flow in the CADGen framework follows this pattern:
+
+1. **Data Preparation**: Raw CAD models → Processed command sequences and point clouds
+2. **Model Training**: Multi-view images + CAD data → Trained models
+3. **Inference**: New multi-view images → Generated 3D CAD models
+4. **Evaluation**: Generated models vs. Ground truth → Performance metrics
+
+## ⚙️ Requirements
+
+- PyTorch 1.9+
+- CUDA-enabled GPU (8GB+ recommended)
 - NumPy
 - timm (PyTorch Image Models)
 - Tensorboard
 
-## Installation
+## 🚀 Installation
 
-Clone the repository:
-```bash
-git clone https://github.com/your-username/CADGen.git
-cd CADGen
-```
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/your-username/CADGen.git
+   cd CADGen
+   ```
 
-Install the required packages (consider creating a virtual environment first):
-```bash
-pip install torch torchvision numpy tensorboard timm
-```
+2. **Install dependencies**:
+   ```bash
+   # Create a virtual environment (recommended)
+   python -m venv cadgen-env
+   source cadgen-env/bin/activate  # On Windows: cadgen-env\Scripts\activate
+   
+   # Install required packages
+   pip install torch==1.9.0 torchvision==0.10.0 numpy==1.20.3 tensorboard==2.6.0 timm==0.4.12
+   ```
 
-## Usage
+## 📊 Usage
 
 ### Data Preparation
 
-The data processing scripts in the `data_process/` directory help prepare your data:
+Prepare your data using the processing scripts:
 
 ```bash
-python data_process/data_split.py
-python data_process/json2pc_my.py
+# Split your dataset
+python data_process/data_split.py --input /path/to/data --output /path/to/output
+
+# Convert JSON CAD data to point clouds
+python data_process/json2pc_my.py --input /path/to/json --output /path/to/pointclouds
 ```
 
 ### Training
 
-To train the basic model:
-```bash
-python 3dmodel/train.py
-```
+Train different model variants:
 
-For deformable model training:
 ```bash
-python 3dmodel/train_deformable.py
-```
+# Basic model training
+python 3dmodel/train.py --config configs/base_config.yaml
 
-For deformable CAD model training:
-```bash
-python 3dmodel/train_deformable_cad.py
+# Deformable model training
+python 3dmodel/train_deformable.py --config configs/deformable_config.yaml
+
+# Deformable CAD model training
+python 3dmodel/train_deformable_cad.py --config configs/deformable_cad_config.yaml
 ```
 
 ### Evaluation
 
-Evaluate your trained models using the scripts in the `evaluation/` directory:
+Evaluate your trained models:
 
 ```bash
-python evaluation/evaluate_gen_torch.py
-python evaluation/evaluate_ae_cd.py
+# Generation quality evaluation
+python evaluation/evaluate_gen_torch.py --model_path /path/to/model --test_data /path/to/test_data
+
+# Chamfer distance evaluation
+python evaluation/evaluate_ae_cd.py --model_path /path/to/model --test_data /path/to/test_data
 ```
 
-## Model Architecture
+## 🧠 Model Architectures
 
-The CADGen framework uses a multi-stage architecture:
-1. Image feature extraction using ResNet backbones
-2. Feature fusion from multiple views
-3. Transformer-based processing
-4. Command and parameter prediction for CAD model generation
-
-## Detailed Model Architectures
+The CADGen framework implements several powerful architectures:
 
 ### Base Model (Views2Points)
+
 The base model takes multi-view images and generates point clouds representing the 3D shape:
+
 - **Backbone**: ResNet-based feature extraction from each view
 - **Fusion Module**: Multi-view feature integration
 - **Decoder**: Transformer architecture that outputs 3D points and CAD command sequences
 
+<p align="center">
+  <img src="docs/assets/base-model.png" alt="Base Model Architecture" width="600"/>
+  <br>
+  <em>Views2Points model architecture</em>
+</p>
+
 ### Deformable Models
+
 The deformable variants incorporate deformable attention mechanisms for better geometric understanding:
+
 - **Deformable Attention**: 3D-aware attention mechanisms that enhance spatial reasoning
 - **Point Sampling Strategy**: Adaptive point sampling to focus computation on relevant regions
 - **Hierarchical Processing**: Multi-scale feature processing for capturing both global and local details
 
 ### Autoregressive Approach
+
 The autoregressive model generates CAD commands sequentially:
+
 - **Command Sequence Modeling**: LSTM/Transformer-based sequence generation
 - **Parameter Prediction**: Specialized networks for predicting geometric parameters
 - **Joint Learning**: Combined learning of commands and their parameters
 
-## Dataset Format
-
-The project expects data in the following format:
+## 📋 Dataset Format
 
 ### Input Images
+
 - Front, top, and side view images (RGB or grayscale)
 - Resolution: Recommend 256×256 pixels
 - Format: PNG or JPG
 
 ### 3D CAD Data
+
 - Point cloud representations (1024 points recommended)
 - CAD command sequences in JSON format:
   ```json
@@ -145,6 +241,7 @@ The project expects data in the following format:
   ```
 
 ### Data Organization
+
 ```
 data/
 ├── images/
@@ -155,7 +252,7 @@ data/
 └── cad_commands/
 ```
 
-## Performance Metrics
+## 📈 Performance Metrics
 
 The framework evaluates performance using:
 
@@ -164,8 +261,15 @@ The framework evaluates performance using:
 3. **Parameter Error**: Mean squared error between predicted and ground truth parameters
 4. **Visual Quality**: Qualitative assessment of the generated 3D models
 
+### Benchmark Results
 
-## Inference Examples
+| Model | CD ↓ | Cmd Acc ↑ | Param MSE ↓ |
+|-------|------|-----------|-------------|
+| Base  | -    | -         | -           |
+| Deformable | - | -       | -           |
+| Autoregressive | - | -   | -           |
+
+## 🖥️ Inference Examples
 
 Generate a CAD model from input views:
 
@@ -195,7 +299,7 @@ parameters = output['pred_args']
 save_cad_model(commands, parameters, 'output.obj')
 ```
 
-## Troubleshooting
+## 🔧 Troubleshooting
 
 ### Common Issues
 
@@ -221,7 +325,7 @@ For environment setup problems, make sure you have:
 - Sufficient GPU memory (8GB+ recommended)
 - All dependencies installed with compatible versions
 
-## Contributing
+## 🤝 Contributing
 
 Contributions to CADGen are welcome! Please follow these steps:
 
@@ -233,7 +337,7 @@ Contributions to CADGen are welcome! Please follow these steps:
 
 Please ensure your code follows the project's style guidelines and includes appropriate tests.
 
-## Future Work
+## 🔮 Future Work
 
 - Integration with popular CAD software
 - Support for more complex CAD operations
@@ -241,14 +345,14 @@ Please ensure your code follows the project's style guidelines and includes appr
 - Mobile deployment options
 - Cross-domain adaptations (architectural, mechanical, etc.)
 
-## License
+## 📄 License
 
 [Add your license information here]
 
-## Acknowledgements
+## 🙏 Acknowledgements
 
 [Add acknowledgements, citations, or references to papers that inspired this work]
 
-## Contact
+## 📬 Contact
 
 [Add contact information]
